@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Table,
   TableBody,
@@ -13,14 +14,14 @@ import type { EventDetail } from "@/types";
 
 interface EventsTableProps {
   events: EventDetail[];
-  onEventClick: (event: EventDetail) => void;
-  search: string;
+  search?: string;
 }
 
 type SortKey = "date" | "name" | "venue" | "location";
 type SortDir = "asc" | "desc";
 
-export function EventsTable({ events, onEventClick, search }: EventsTableProps) {
+export function EventsTable({ events, search = "" }: EventsTableProps) {
+  const navigate = useNavigate();
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -88,62 +89,60 @@ export function EventsTable({ events, onEventClick, search }: EventsTableProps) 
   );
 
   return (
-    <div className="space-y-4">
-      <Table>
-        <TableHeader>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <SortHeader label="Date" sortKeyName="date" />
+          <SortHeader label="Event" sortKeyName="name" />
+          <TableHead>Artists</TableHead>
+          <SortHeader label="Venue" sortKeyName="venue" />
+          <SortHeader label="Location" sortKeyName="location" />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {sorted.length === 0 ? (
           <TableRow>
-            <SortHeader label="Date" sortKeyName="date" />
-            <SortHeader label="Event" sortKeyName="name" />
-            <TableHead>Artists</TableHead>
-            <SortHeader label="Venue" sortKeyName="venue" />
-            <SortHeader label="Location" sortKeyName="location" />
+            <TableCell colSpan={5} className="text-center text-muted-foreground">
+              No events found
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                No events found
+        ) : (
+          sorted.map((event) => (
+            <TableRow
+              key={event.id}
+              className={`cursor-pointer ${event.cancelled ? "opacity-50" : ""}`}
+              onClick={() => navigate(`/events/${event.id}`)}
+            >
+              <TableCell className="whitespace-nowrap">
+                {formatDate(event.date)}
+                {event.end_date && ` — ${formatDate(event.end_date)}`}
+              </TableCell>
+              <TableCell className="font-medium">
+                <span className={event.cancelled ? "line-through" : ""}>
+                  {event.name}
+                </span>
+                {event.cancelled && (
+                  <span className="ml-2 text-xs text-muted-foreground">(Cancelled)</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <ArtistBadgeList artists={event.artists} />
+              </TableCell>
+              <TableCell>
+                <EntityLink to={`/venues/${event.venue_id}`}>
+                  {event.venue}
+                </EntityLink>
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                <EntityLink to={`/locations/${event.location_id}`}>
+                  {event.city}, {event.state}
+                </EntityLink>
               </TableCell>
             </TableRow>
-          ) : (
-            sorted.map((event) => (
-              <TableRow
-                key={event.id}
-                className={`cursor-pointer ${event.cancelled ? "opacity-50" : ""}`}
-                onClick={() => onEventClick(event)}
-              >
-                <TableCell className="whitespace-nowrap">
-                  {formatDate(event.date)}
-                  {event.end_date && ` — ${formatDate(event.end_date)}`}
-                </TableCell>
-                <TableCell className="font-medium">
-                  <span className={event.cancelled ? "line-through" : ""}>
-                    {event.name}
-                  </span>
-                  {event.cancelled && (
-                    <span className="ml-2 text-xs text-muted-foreground">(Cancelled)</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <ArtistBadgeList artists={event.artists} />
-                </TableCell>
-                <TableCell>
-                  <EntityLink to={`/venues/${event.venue_id}`}>
-                    {event.venue}
-                  </EntityLink>
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  <EntityLink to={`/locations/${event.location_id}`}>
-                    {event.city}, {event.state}
-                  </EntityLink>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
+          ))
+        )}
+      </TableBody>
+    </Table>
   );
 }
 

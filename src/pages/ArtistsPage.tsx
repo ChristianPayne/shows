@@ -1,14 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
 import { ArrowUpDown } from "lucide-react";
 import { MergeDialog } from "@/components/MergeDialog";
@@ -172,45 +165,7 @@ export function ArtistDetailPage() {
           navigate("/artists");
         }}
       />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Event</TableHead>
-            <TableHead>Venue</TableHead>
-            <TableHead>Location</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {events.map((event) => (
-            <TableRow key={event.id}>
-              <TableCell className="whitespace-nowrap">
-                {formatDate(event.date)}
-              </TableCell>
-              <TableCell className="font-medium">
-                <Link to={`/events/${event.id}`} className="hover:underline hover:text-foreground transition-colors">
-                  {event.name}
-                </Link>
-              </TableCell>
-              <TableCell>
-                <Link to={`/venues/${event.venue_id}`} className="hover:underline hover:text-foreground transition-colors">
-                  {event.venue}
-                </Link>
-              </TableCell>
-              <TableCell>
-                <Link to={`/locations/${event.location_id}`} className="hover:underline hover:text-foreground transition-colors">
-                  {event.city}, {event.state}
-                </Link>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <EventsTable events={events} />
     </div>
   );
-}
-
-function formatDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split("-");
-  return `${month}/${day}/${year}`;
 }

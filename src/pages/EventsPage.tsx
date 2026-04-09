@@ -8,7 +8,6 @@ import * as api from "@/api";
 import type { EventDetail, CreateEventInput } from "@/types";
 
 export function EventsListPage() {
-  const navigate = useNavigate();
   const [events, setEvents] = useState<EventDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -49,11 +48,7 @@ export function EventsListPage() {
           Add Event
         </Link>
       </div>
-      <EventsTable
-        events={events}
-        search={search}
-        onEventClick={(event) => navigate(`/events/${event.id}`)}
-      />
+      <EventsTable events={events} search={search} />
     </div>
   );
 }
