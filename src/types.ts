@@ -65,6 +65,7 @@ export interface MonthCount {
 
 export interface ImportResult {
   events_created: number;
+  events_skipped: number;
   artists_created: number;
   venues_created: number;
   locations_created: number;

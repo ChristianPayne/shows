@@ -138,40 +138,9 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
       {/* Data */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Data</h2>
+
+        {/* CSV */}
         <div className="rounded-lg border divide-y">
-          <button
-            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors"
-            onClick={async () => {
-              setExportMsg("");
-              try {
-                const destination = await save({
-                  defaultPath: "shows_export.csv",
-                  filters: [{ name: "CSV", extensions: ["csv"] }],
-                });
-                if (!destination) return;
-                await api.exportCsv(destination);
-                setExportMsg(`Exported to ${destination}`);
-              } catch (err) {
-                setExportMsg(`Export failed: ${err}`);
-              }
-            }}
-          >
-            <FileDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <div className="text-left">
-              <p className="font-medium">Export CSV</p>
-              <p className="text-xs text-muted-foreground">Save all events as a spreadsheet</p>
-            </div>
-          </button>
-          <button
-            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors"
-            onClick={handleBackup}
-          >
-            <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <div className="text-left">
-              <p className="font-medium">Export Backup</p>
-              <p className="text-xs text-muted-foreground">Save a copy of the database</p>
-            </div>
-          </button>
           <button
             className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors"
             onClick={() => fileInputRef.current?.click()}
@@ -190,6 +159,33 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
             onChange={handleImport}
             className="hidden"
           />
+          <button
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors"
+            onClick={async () => {
+              setExportMsg("");
+              try {
+                const destination = await save({
+                  defaultPath: `shows_export_${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.csv`,
+                  filters: [{ name: "CSV", extensions: ["csv"] }],
+                });
+                if (!destination) return;
+                await api.exportCsv(destination);
+                setExportMsg(`Exported to ${destination}`);
+              } catch (err) {
+                setExportMsg(`Export failed: ${err}`);
+              }
+            }}
+          >
+            <FileDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="text-left">
+              <p className="font-medium">Export CSV</p>
+              <p className="text-xs text-muted-foreground">Save all events as a spreadsheet</p>
+            </div>
+          </button>
+        </div>
+
+        {/* Backup */}
+        <div className="rounded-lg border divide-y">
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <button className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors">
@@ -216,6 +212,16 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          <button
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors"
+            onClick={handleBackup}
+          >
+            <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="text-left">
+              <p className="font-medium">Export Backup</p>
+              <p className="text-xs text-muted-foreground">Save a copy of the database</p>
+            </div>
+          </button>
         </div>
         {(exportMsg || backupMsg || restoreMsg) && (
           <p className="text-sm text-muted-foreground">
@@ -230,7 +236,7 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
           </Alert>
         )}
         {importSuccess && (
-          <Alert>
+          <Alert className="border-green-500/30 text-green-700 dark:text-green-400 [&>svg]:text-green-600 dark:[&>svg]:text-green-400">
             <CheckCircle className="h-4 w-4" />
             <AlertTitle>Import Successful</AlertTitle>
             <AlertDescription>
@@ -238,6 +244,9 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
               {importSuccess.artists_created} artists,{" "}
               {importSuccess.venues_created} venues, and{" "}
               {importSuccess.locations_created} locations.
+              {importSuccess.events_skipped > 0 && (
+                <> Skipped {importSuccess.events_skipped} duplicate{importSuccess.events_skipped !== 1 ? "s" : ""}.</>
+              )}
             </AlertDescription>
           </Alert>
         )}
@@ -246,14 +255,14 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
       <Separator />
 
       {/* Wipe Database */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Danger Zone</h2>
+      <div className="rounded-lg border border-destructive/15 dark:border-destructive/25 p-4 space-y-3">
+        <h2 className="text-sm font-medium text-destructive/60 dark:text-destructive-foreground/70">Danger Zone</h2>
         <p className="text-sm text-muted-foreground">
           Permanently delete all events, artists, venues, and locations.
         </p>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2 border-destructive/25 dark:border-destructive-foreground/30 text-destructive/70 dark:text-destructive-foreground/70 hover:text-destructive dark:hover:text-destructive-foreground hover:border-destructive/40 hover:bg-destructive/5 dark:hover:bg-destructive-foreground/5">
               <Trash2 className="h-4 w-4" />
               Wipe Database
             </Button>

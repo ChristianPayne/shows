@@ -116,7 +116,7 @@ export function StatsPage() {
 
 function StatCard({ label, value, to }: { label: string; value: number; to: string }) {
   return (
-    <Link to={to} className="rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors">
+    <Link to={to} className="rounded-lg border bg-card p-4 hover:border-primary/50 transition-colors">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="text-3xl font-bold">{value}</p>
     </Link>
@@ -141,7 +141,7 @@ function BarRow({
       <span className="w-40 text-sm truncate shrink-0">{label}</span>
       <div className="flex-1 h-6 bg-muted rounded overflow-hidden">
         <div
-          className="h-full bg-primary/70 rounded transition-all"
+          className="h-full bg-foreground/15 group-hover:bg-primary/70 rounded transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -151,7 +151,7 @@ function BarRow({
 
   if (to) {
     return (
-      <Link to={to} className="block hover:bg-accent/30 rounded -mx-2 px-2 py-0.5 transition-colors">
+      <Link to={to} className="group block hover:bg-accent/30 rounded -mx-2 px-2 py-0.5 transition-colors">
         {content}
       </Link>
     );

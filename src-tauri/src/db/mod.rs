@@ -10,7 +10,8 @@ use std::str::FromStr;
 pub async fn init(app_data_dir: PathBuf) -> Result<SqlitePool, sqlx::Error> {
     std::fs::create_dir_all(&app_data_dir).ok();
 
-    let db_path = app_data_dir.join("shows.db");
+    let db_name = if cfg!(debug_assertions) { "shows_dev.db" } else { "shows.db" };
+    let db_path = app_data_dir.join(db_name);
     let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
 
     let options = SqliteConnectOptions::from_str(&db_url)?
@@ -174,5 +175,6 @@ async fn find_or_create_artist_raw(pool: &SqlitePool, name: &str) -> Result<i64,
 
 /// Get the path to the database file.
 pub fn db_path(app_data_dir: &PathBuf) -> PathBuf {
-    app_data_dir.join("shows.db")
+    let db_name = if cfg!(debug_assertions) { "shows_dev.db" } else { "shows.db" };
+    app_data_dir.join(db_name)
 }

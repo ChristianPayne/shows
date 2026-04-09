@@ -9,8 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ArrowUpDown } from "lucide-react";
 import { ArtistBadgeList } from "@/components/EntityLink";
 import { MergeDialog } from "@/components/MergeDialog";
 import { EditableName } from "@/components/EditableName";
@@ -23,16 +23,33 @@ export function VenuesListPage() {
   const [venues, setVenues] = useState<EntityWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "count">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     api.getVenues().then(setVenues).finally(() => setLoading(false));
   }, []);
 
+  const toggleSort = (key: "name" | "count") => {
+    if (sortBy === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortDir(key === "count" ? "desc" : "asc");
+    }
+  };
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    if (!q) return venues;
-    return venues.filter((v) => v.name.toLowerCase().includes(q));
-  }, [venues, search]);
+    let result = venues;
+    if (q) result = result.filter((v) => v.name.toLowerCase().includes(q));
+    return [...result].sort((a, b) => {
+      let cmp = sortBy === "count"
+        ? a.event_count - b.event_count
+        : a.name.replace(/^The\s+/i, "").localeCompare(b.name.replace(/^The\s+/i, ""));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [venues, search, sortBy, sortDir]);
 
   if (loading) {
     return <p className="text-muted-foreground">Loading venues...</p>;
@@ -49,28 +66,39 @@ export function VenuesListPage() {
           className="max-w-sm"
         />
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Venue</TableHead>
-            <TableHead className="text-right">Events</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filtered.map((venue) => (
-            <TableRow
-              key={venue.id}
-              className="cursor-pointer"
-              onClick={() => navigate(`/venues/${venue.id}`)}
-            >
-              <TableCell className="font-medium">{venue.name}</TableCell>
-              <TableCell className="text-right">
-                <Badge variant="secondary">{venue.event_count}</Badge>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
+        <button className="w-48 shrink-0 flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("name")}>
+          Name <ArrowUpDown className="h-3 w-3" />
+        </button>
+        <button className="flex-1 flex items-center justify-end gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("count")}>
+          Events <ArrowUpDown className="h-3 w-3" />
+        </button>
+        <span className="w-6 shrink-0" />
+      </div>
+      <div className="space-y-1">
+        {(() => {
+          const maxCount = Math.max(1, ...filtered.map((v) => v.event_count));
+          return filtered.map((venue) => {
+            const pct = (venue.event_count / maxCount) * 100;
+            return (
+              <button
+                key={venue.id}
+                className="group flex items-center gap-3 w-full rounded-md px-2 py-1.5 hover:bg-accent/30 transition-colors text-left"
+                onClick={() => navigate(`/venues/${venue.id}`)}
+              >
+                <span className="w-48 text-sm font-medium truncate shrink-0">{venue.name}</span>
+                <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
+                  <div
+                    className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{venue.event_count}</span>
+              </button>
+            );
+          });
+        })()}
+      </div>
     </div>
   );
 }

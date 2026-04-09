@@ -23,14 +23,14 @@ export function EntityLink({ to, children }: EntityLinkProps) {
 /** Artist badge that navigates to the artist's detail view on click. */
 export function ArtistBadge({ name, artistId }: { name: string; artistId?: number }) {
   if (artistId === undefined) {
-    return <Badge variant="secondary">{name}</Badge>;
+    return <Badge variant="outline">{name}</Badge>;
   }
 
   return (
     <Link to={`/artists/${artistId}`} onClick={(e) => e.stopPropagation()}>
       <Badge
-        variant="secondary"
-        className="cursor-pointer hover:bg-secondary/60 hover:underline transition-colors"
+        variant="outline"
+        className="cursor-pointer hover:bg-accent hover:text-primary hover:border-primary/30 hover:underline transition-colors"
       >
         {name}
       </Badge>
@@ -60,7 +60,7 @@ export function ArtistBadgeList({ artists }: { artists: ArtistInfo[] }) {
 
         // B2B group — render as a single badge with multiple clickable names
         return (
-          <Badge key={`b2b-${i}`} variant="secondary" className="gap-0">
+          <Badge key={`b2b-${i}`} variant="outline" className="gap-0 hover:bg-accent hover:text-primary hover:border-primary/30 transition-colors">
             {group.map((artist, j) => (
               <span key={artist.id} className="inline-flex items-center">
                 {j > 0 && (
