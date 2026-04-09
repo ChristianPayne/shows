@@ -1,0 +1,3 @@
+-- This migration is handled in Rust code since it requires procedural logic
+-- (splitting names, find-or-create, updating links).
+-- This file exists as a marker that the migration has been applied.
