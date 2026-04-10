@@ -136,6 +136,14 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
       setError("Date is required");
       return;
     }
+    if (!venue.trim()) {
+      setError("Venue is required");
+      return;
+    }
+    if (!city.trim() || !state.trim()) {
+      setError("City and state are required");
+      return;
+    }
     setSubmitting(true);
     try {
       await onSubmit({

@@ -203,6 +203,8 @@ export function ArtistDetailPage() {
           onFixMatch={() => setMatchOpen(true)}
           onDelete={artist.event_count === 0 ? async () => {
             await api.deleteArtist(artist.id);
+            artistsCache = [];
+            artistEventsCache = new Map();
             navigate("/artists");
           } : undefined}
         />

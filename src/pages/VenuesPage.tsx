@@ -180,6 +180,8 @@ export function VenueDetailPage() {
           onMerge={() => setMergeOpen(true)}
           onDelete={venue.event_count === 0 ? async () => {
             await api.deleteVenue(venue.id);
+            venuesCache = [];
+            venueEventsCache = new Map();
             navigate("/venues");
           } : undefined}
         />

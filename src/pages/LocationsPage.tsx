@@ -183,6 +183,8 @@ export function LocationDetailPage() {
           onMerge={() => setMergeOpen(true)}
           onDelete={location.event_count === 0 ? async () => {
             await api.deleteLocation(location.id);
+            locationsCache = [];
+            locationEventsCache = new Map();
             navigate("/locations");
           } : undefined}
         />
