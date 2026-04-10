@@ -5,40 +5,35 @@ import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUpDown } from "lucide-react";
+import { SkeletonRow } from "@/components/Skeleton";
 import { MergeDialog } from "@/components/MergeDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
 import type { EntityWithCount, EventDetail } from "@/types";
 
-let venuesCache: EntityWithCount[] = [];
-let venueEventsCache = new Map<number, string[]>();
+let lastVenueCount = 0;
 
 export function VenuesListPage() {
   const navigate = useNavigate();
-  const [venues, setVenues] = useState<EntityWithCount[]>(venuesCache);
+  const [venues, setVenues] = useState<EntityWithCount[] | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(venueEventsCache);
+  const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(new Map());
 
   useEffect(() => {
-    if (venuesCache.length === 0) {
-      api.getVenues().then((data) => { venuesCache = data; setVenues(data); });
-    }
-    if (venueEventsCache.size === 0) {
-      api.getEvents().then((events) => {
-        const map = new Map<number, string[]>();
-        for (const event of events) {
-          const list = map.get(event.venue_id) ?? [];
-          list.push(event.name);
-          map.set(event.venue_id, list);
-        }
-        venueEventsCache = map;
-        setVenueEvents(map);
-      });
-    }
+    api.getVenues().then((data) => { lastVenueCount = data.length; setVenues(data); });
+    api.getEvents().then((events) => {
+      const map = new Map<number, string[]>();
+      for (const event of events) {
+        const list = map.get(event.venue_id) ?? [];
+        list.push(event.name);
+        map.set(event.venue_id, list);
+      }
+      setVenueEvents(map);
+    });
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -51,6 +46,7 @@ export function VenuesListPage() {
   };
 
   const filtered = useMemo(() => {
+    if (!venues) return [];
     const q = search.toLowerCase();
     let result = venues;
     if (q) result = result.filter((v) => v.name.toLowerCase().includes(q));
@@ -84,11 +80,14 @@ export function VenuesListPage() {
         <span className="w-6 shrink-0" />
       </div>
       <div className="space-y-1">
-        {(() => {
+        {!venues ? (
+          Array.from({ length: lastVenueCount || 10 }, (_, i) => (
+            <SkeletonRow key={i} />
+          ))
+        ) : filtered.map((venue, index) => {
           const maxCount = Math.max(1, ...filtered.map((v) => v.event_count));
-          return filtered.map((venue, index) => {
-            const pct = (venue.event_count / maxCount) * 100;
-            return (
+          const pct = (venue.event_count / maxCount) * 100;
+          return (
               <button
                 key={venue.id}
                 className="group flex items-center gap-3 w-full rounded-md px-2 py-1.5 hover:bg-accent/30 transition-colors text-left"
@@ -118,8 +117,7 @@ export function VenuesListPage() {
                 <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{venue.event_count}</span>
               </button>
             );
-          });
-        })()}
+        })}
       </div>
     </div>
   );
@@ -180,8 +178,6 @@ export function VenueDetailPage() {
           onMerge={() => setMergeOpen(true)}
           onDelete={venue.event_count === 0 ? async () => {
             await api.deleteVenue(venue.id);
-            venuesCache = [];
-            venueEventsCache = new Map();
             navigate("/venues");
           } : undefined}
         />

@@ -5,6 +5,7 @@ import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUpDown, ExternalLink as ExternalLinkIcon } from "lucide-react";
+import { SkeletonRow } from "@/components/Skeleton";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { MergeDialog } from "@/components/MergeDialog";
 import { MatchPickerDialog } from "@/components/MatchPickerDialog";
@@ -13,24 +14,20 @@ import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
 import type { ArtistWithCount, EventDetail, ArtistStats, ArtistLinks } from "@/types";
 
-let artistsCache: ArtistWithCount[] = [];
-let artistEventsCache = new Map<number, string[]>();
+let lastArtistCount = 0;
 
 export function ArtistsListPage() {
   const navigate = useNavigate();
-  const [artists, setArtists] = useState<ArtistWithCount[]>(artistsCache);
+  const [artists, setArtists] = useState<ArtistWithCount[] | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const [artistEvents, setArtistEvents] = useState<Map<number, string[]>>(artistEventsCache);
+  const [artistEvents, setArtistEvents] = useState<Map<number, string[]>>(new Map());
 
   useEffect(() => {
-    if (artistsCache.length === 0) {
-      api.getArtists().then((data) => { artistsCache = data; setArtists(data); });
-    }
-    if (artistEventsCache.size === 0) {
-      api.getEvents().then((events) => {
+    api.getArtists().then((data) => { lastArtistCount = data.length; setArtists(data); });
+    api.getEvents().then((events) => {
       const map = new Map<number, string[]>();
       for (const event of events) {
         for (const set of event.artist_sets) {
@@ -41,10 +38,8 @@ export function ArtistsListPage() {
           }
         }
       }
-      artistEventsCache = map;
       setArtistEvents(map);
     });
-    }
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -57,6 +52,7 @@ export function ArtistsListPage() {
   };
 
   const filtered = useMemo(() => {
+    if (!artists) return [];
     const q = search.toLowerCase();
     let result = artists;
     if (q) result = result.filter((a) => a.name.toLowerCase().includes(q));
@@ -90,9 +86,12 @@ export function ArtistsListPage() {
         <span className="w-6 shrink-0" />
       </div>
       <div className="space-y-1">
-        {(() => {
+        {!artists ? (
+          Array.from({ length: lastArtistCount || 10 }, (_, i) => (
+            <SkeletonRow key={i} />
+          ))
+        ) : filtered.map((artist, index) => {
           const maxCount = Math.max(1, ...filtered.map((a) => a.event_count));
-          return filtered.map((artist, index) => {
           const pct = (artist.event_count / maxCount) * 100;
           return (
             <button
@@ -135,8 +134,7 @@ export function ArtistsListPage() {
               <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{artist.event_count}</span>
             </button>
           );
-        });
-        })()}
+        })}
       </div>
     </div>
   );
@@ -203,8 +201,6 @@ export function ArtistDetailPage() {
           onFixMatch={() => setMatchOpen(true)}
           onDelete={artist.event_count === 0 ? async () => {
             await api.deleteArtist(artist.id);
-            artistsCache = [];
-            artistEventsCache = new Map();
             navigate("/artists");
           } : undefined}
         />

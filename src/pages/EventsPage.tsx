@@ -4,27 +4,21 @@ import { Input } from "@/components/ui/input";
 import { EventsTable } from "@/components/EventsTable";
 import { EventDetailView } from "@/components/EventDetail";
 import { EventForm } from "@/components/EventForm";
+import { SkeletonTableRow } from "@/components/Skeleton";
 import * as api from "@/api";
-import { invalidateStatsCache } from "@/pages/StatsPage";
 import type { EventDetail, CreateEventInput } from "@/types";
 
-// Cache events outside the component so they persist across navigations
-let eventsCache: EventDetail[] = [];
-export function invalidateEventsCache() { eventsCache = []; }
+let lastEventCount = 0;
 
 export function EventsListPage() {
-  const [events, setEvents] = useState<EventDetail[]>(eventsCache);
+  const [events, setEvents] = useState<EventDetail[] | null>(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    // Only fetch if cache is empty (first load)
-    // Subsequent mounts use the cache directly, no re-render
-    if (eventsCache.length === 0) {
-      api.getEvents().then((data) => {
-        eventsCache = data;
-        setEvents(data);
-      });
-    }
+    api.getEvents().then((data) => {
+      lastEventCount = data.length;
+      setEvents(data);
+    });
   }, []);
 
   return (
@@ -38,7 +32,17 @@ export function EventsListPage() {
           className="w-1/2 mx-auto"
         />
       </div>
-      <EventsTable events={events} search={search} />
+      {events ? (
+        <EventsTable events={events} search={search} />
+      ) : (
+        <table className="w-full">
+          <tbody>
+            {Array.from({ length: lastEventCount || 10 }, (_, i) => (
+              <SkeletonTableRow key={i} />
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -71,16 +75,14 @@ export function EventDetailPage() {
 
   const handleDelete = async (eventId: number) => {
     await api.deleteEvent(eventId);
-    invalidateEventsCache();
-    invalidateStatsCache();
+
     navigate("/events");
   };
 
   const handleToggleCancelled = async (eventId: number, cancelled: boolean) => {
     await api.setEventCancelled(eventId, cancelled);
     setEvent({ ...event, cancelled });
-    invalidateEventsCache();
-    invalidateStatsCache();
+
   };
 
   return (
@@ -121,8 +123,7 @@ export function EventEditPage() {
 
   const handleUpdate = async (input: CreateEventInput) => {
     await api.updateEvent(event.id, input);
-    invalidateEventsCache();
-    invalidateStatsCache();
+
     navigate(`/events/${event.id}`, { replace: true });
   };
 
@@ -140,8 +141,7 @@ export function EventNewPage() {
 
   const handleCreate = async (input: CreateEventInput) => {
     const newId = await api.createEvent(input);
-    invalidateEventsCache();
-    invalidateStatsCache();
+
     navigate(`/events/${newId}`);
   };
 

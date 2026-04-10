@@ -5,40 +5,35 @@ import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUpDown } from "lucide-react";
+import { SkeletonRow } from "@/components/Skeleton";
 import { MergeDialog } from "@/components/MergeDialog";
 import { EditableLocation } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
 import type { LocationWithCount, EventDetail } from "@/types";
 
-let locationsCache: LocationWithCount[] = [];
-let locationEventsCache = new Map<number, string[]>();
+let lastLocationCount = 0;
 
 export function LocationsListPage() {
   const navigate = useNavigate();
-  const [locations, setLocations] = useState<LocationWithCount[]>(locationsCache);
+  const [locations, setLocations] = useState<LocationWithCount[] | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const [locationEvents, setLocationEvents] = useState<Map<number, string[]>>(locationEventsCache);
+  const [locationEvents, setLocationEvents] = useState<Map<number, string[]>>(new Map());
 
   useEffect(() => {
-    if (locationsCache.length === 0) {
-      api.getLocations().then((data) => { locationsCache = data; setLocations(data); });
-    }
-    if (locationEventsCache.size === 0) {
-      api.getEvents().then((events) => {
-        const map = new Map<number, string[]>();
-        for (const event of events) {
-          const list = map.get(event.location_id) ?? [];
-          list.push(event.name);
-          map.set(event.location_id, list);
-        }
-        locationEventsCache = map;
-        setLocationEvents(map);
-      });
-    }
+    api.getLocations().then((data) => { lastLocationCount = data.length; setLocations(data); });
+    api.getEvents().then((events) => {
+      const map = new Map<number, string[]>();
+      for (const event of events) {
+        const list = map.get(event.location_id) ?? [];
+        list.push(event.name);
+        map.set(event.location_id, list);
+      }
+      setLocationEvents(map);
+    });
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -51,6 +46,7 @@ export function LocationsListPage() {
   };
 
   const filtered = useMemo(() => {
+    if (!locations) return [];
     const q = search.toLowerCase();
     let result = locations;
     if (q) result = result.filter(
@@ -86,11 +82,14 @@ export function LocationsListPage() {
         <span className="w-6 shrink-0" />
       </div>
       <div className="space-y-1">
-        {(() => {
+        {!locations ? (
+          Array.from({ length: lastLocationCount || 10 }, (_, i) => (
+            <SkeletonRow key={i} />
+          ))
+        ) : filtered.map((loc, index) => {
           const maxCount = Math.max(1, ...filtered.map((l) => l.event_count));
-          return filtered.map((loc, index) => {
-            const pct = (loc.event_count / maxCount) * 100;
-            return (
+          const pct = (loc.event_count / maxCount) * 100;
+          return (
               <button
                 key={loc.id}
                 className="group flex items-center gap-3 w-full rounded-md px-2 py-1.5 hover:bg-accent/30 transition-colors text-left"
@@ -120,8 +119,7 @@ export function LocationsListPage() {
                 <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{loc.event_count}</span>
               </button>
             );
-          });
-        })()}
+        })}
       </div>
     </div>
   );
@@ -183,8 +181,6 @@ export function LocationDetailPage() {
           onMerge={() => setMergeOpen(true)}
           onDelete={location.event_count === 0 ? async () => {
             await api.deleteLocation(location.id);
-            locationsCache = [];
-            locationEventsCache = new Map();
             navigate("/locations");
           } : undefined}
         />

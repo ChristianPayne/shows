@@ -10,23 +10,15 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-let statsCache: Stats | null = null;
-let statsEventsCache: EventDetail[] = [];
-export function invalidateStatsCache() { statsCache = null; statsEventsCache = []; }
-
 export function StatsPage() {
-  const [stats, setStats] = useState<Stats | null>(statsCache);
-  const [events, setEvents] = useState<EventDetail[]>(statsEventsCache);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [events, setEvents] = useState<EventDetail[]>([]);
 
   useEffect(() => {
-    if (!statsCache) {
-      Promise.all([api.getStats(), api.getEvents()]).then(([s, e]) => {
-        statsCache = s;
-        statsEventsCache = e;
-        setStats(s);
-        setEvents(e);
-      });
-    }
+    Promise.all([api.getStats(), api.getEvents()]).then(([s, e]) => {
+      setStats(s);
+      setEvents(e);
+    });
   }, []);
 
   const today = new Date().toISOString().slice(0, 10);
