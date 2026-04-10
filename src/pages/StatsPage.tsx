@@ -10,16 +10,23 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+let statsCache: Stats | null = null;
+let statsEventsCache: EventDetail[] = [];
+export function invalidateStatsCache() { statsCache = null; statsEventsCache = []; }
+
 export function StatsPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [events, setEvents] = useState<EventDetail[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<Stats | null>(statsCache);
+  const [events, setEvents] = useState<EventDetail[]>(statsEventsCache);
 
   useEffect(() => {
-    Promise.all([api.getStats(), api.getEvents()]).then(([s, e]) => {
-      setStats(s);
-      setEvents(e);
-    }).finally(() => setLoading(false));
+    if (!statsCache) {
+      Promise.all([api.getStats(), api.getEvents()]).then(([s, e]) => {
+        statsCache = s;
+        statsEventsCache = e;
+        setStats(s);
+        setEvents(e);
+      });
+    }
   }, []);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -30,7 +37,7 @@ export function StatsPage() {
     [events, today]
   );
 
-  if (loading || !stats) {
+  if (!stats) {
     return <p className="text-muted-foreground">Loading dashboard...</p>;
   }
 
@@ -66,7 +73,10 @@ export function StatsPage() {
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium">{event.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{event.name}</p>
+                      <span className="text-xs text-muted-foreground">{getDaysUntil(event.date)}</span>
+                    </div>
                     <p className="text-sm text-muted-foreground">{event.venue} — {event.city}, {event.state}</p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {event.artist_sets.flatMap((set) =>
@@ -209,4 +219,14 @@ function BarRow({
   }
 
   return <div className="py-0.5">{content}</div>;
+}
+
+function getDaysUntil(dateStr: string): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eventDate = new Date(dateStr + "T00:00:00");
+  const days = Math.ceil((eventDate.getTime() - today.getTime()) / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
 }

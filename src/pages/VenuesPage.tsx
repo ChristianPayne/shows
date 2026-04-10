@@ -11,27 +11,34 @@ import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
 import type { EntityWithCount, EventDetail } from "@/types";
 
+let venuesCache: EntityWithCount[] = [];
+let venueEventsCache = new Map<number, string[]>();
+
 export function VenuesListPage() {
   const navigate = useNavigate();
-  const [venues, setVenues] = useState<EntityWithCount[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [venues, setVenues] = useState<EntityWithCount[]>(venuesCache);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(new Map());
+  const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(venueEventsCache);
 
   useEffect(() => {
-    api.getVenues().then(setVenues).finally(() => setLoading(false));
-    api.getEvents().then((events) => {
-      const map = new Map<number, string[]>();
-      for (const event of events) {
-        const list = map.get(event.venue_id) ?? [];
-        list.push(event.name);
-        map.set(event.venue_id, list);
-      }
-      setVenueEvents(map);
-    });
+    if (venuesCache.length === 0) {
+      api.getVenues().then((data) => { venuesCache = data; setVenues(data); });
+    }
+    if (venueEventsCache.size === 0) {
+      api.getEvents().then((events) => {
+        const map = new Map<number, string[]>();
+        for (const event of events) {
+          const list = map.get(event.venue_id) ?? [];
+          list.push(event.name);
+          map.set(event.venue_id, list);
+        }
+        venueEventsCache = map;
+        setVenueEvents(map);
+      });
+    }
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -55,10 +62,6 @@ export function VenuesListPage() {
     });
   }, [venues, search, sortBy, sortDir]);
 
-  if (loading) {
-    return <p className="text-muted-foreground">Loading venues...</p>;
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -67,7 +70,7 @@ export function VenuesListPage() {
           placeholder="Search venues..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
+          className="w-1/2 mx-auto"
         />
       </div>
       <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
@@ -92,10 +95,10 @@ export function VenuesListPage() {
                 onClick={() => navigate(`/venues/${venue.id}`)}
               >
                 <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
-                <span className="w-48 text-sm font-medium truncate shrink-0">{venue.name}</span>
+                <span className="flex-1 min-w-0 text-sm font-medium truncate">{venue.name}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
+                    <div className="w-1/4 shrink-0 h-5 bg-muted rounded overflow-hidden relative">
                       <div
                         className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
                         style={{ width: `${pct}%` }}

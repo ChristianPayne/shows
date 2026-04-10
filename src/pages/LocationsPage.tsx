@@ -11,27 +11,34 @@ import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
 import type { LocationWithCount, EventDetail } from "@/types";
 
+let locationsCache: LocationWithCount[] = [];
+let locationEventsCache = new Map<number, string[]>();
+
 export function LocationsListPage() {
   const navigate = useNavigate();
-  const [locations, setLocations] = useState<LocationWithCount[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [locations, setLocations] = useState<LocationWithCount[]>(locationsCache);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const [locationEvents, setLocationEvents] = useState<Map<number, string[]>>(new Map());
+  const [locationEvents, setLocationEvents] = useState<Map<number, string[]>>(locationEventsCache);
 
   useEffect(() => {
-    api.getLocations().then(setLocations).finally(() => setLoading(false));
-    api.getEvents().then((events) => {
-      const map = new Map<number, string[]>();
-      for (const event of events) {
-        const list = map.get(event.location_id) ?? [];
-        list.push(event.name);
-        map.set(event.location_id, list);
-      }
-      setLocationEvents(map);
-    });
+    if (locationsCache.length === 0) {
+      api.getLocations().then((data) => { locationsCache = data; setLocations(data); });
+    }
+    if (locationEventsCache.size === 0) {
+      api.getEvents().then((events) => {
+        const map = new Map<number, string[]>();
+        for (const event of events) {
+          const list = map.get(event.location_id) ?? [];
+          list.push(event.name);
+          map.set(event.location_id, list);
+        }
+        locationEventsCache = map;
+        setLocationEvents(map);
+      });
+    }
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -57,10 +64,6 @@ export function LocationsListPage() {
     });
   }, [locations, search, sortBy, sortDir]);
 
-  if (loading) {
-    return <p className="text-muted-foreground">Loading locations...</p>;
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -69,7 +72,7 @@ export function LocationsListPage() {
           placeholder="Search locations..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
+          className="w-1/2 mx-auto"
         />
       </div>
       <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
@@ -94,10 +97,10 @@ export function LocationsListPage() {
                 onClick={() => navigate(`/locations/${loc.id}`)}
               >
                 <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
-                <span className="w-48 text-sm font-medium truncate shrink-0">{loc.city}, {loc.state}</span>
+                <span className="flex-1 min-w-0 text-sm font-medium truncate">{loc.city}, {loc.state}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
+                    <div className="w-1/4 shrink-0 h-5 bg-muted rounded overflow-hidden relative">
                       <div
                         className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
                         style={{ width: `${pct}%` }}

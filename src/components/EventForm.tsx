@@ -57,6 +57,7 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
   const [cityNames, setCityNames] = useState<string[]>([]);
   const [stateNames, setStateNames] = useState<string[]>([]);
   const [artistNames, setArtistNames] = useState<string[]>([]);
+  const [venueLocationMap, setVenueLocationMap] = useState<Map<string, { city: string; state: string }>>(new Map());
 
   useEffect(() => {
     api.getVenues().then((v) => setVenueNames(v.map((x) => x.name)));
@@ -65,6 +66,14 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
       setStateNames([...new Set(l.map((x) => x.state))]);
     });
     api.getArtists().then((a) => setArtistNames(a.map((x) => x.name)));
+    // Build venue → location map from existing events
+    api.getEvents().then((events) => {
+      const map = new Map<string, { city: string; state: string }>();
+      for (const event of events) {
+        map.set(event.venue, { city: event.city, state: event.state });
+      }
+      setVenueLocationMap(map);
+    });
   }, []);
 
   const availableArtists = useMemo(
@@ -192,7 +201,14 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
           <Autocomplete
             id="venue"
             value={venue}
-            onChange={setVenue}
+            onChange={(v) => {
+              setVenue(v);
+              const loc = venueLocationMap.get(v);
+              if (loc) {
+                setCity(loc.city);
+                setState(loc.state);
+              }
+            }}
             suggestions={venueNames}
             placeholder="e.g., Pier 80"
           />

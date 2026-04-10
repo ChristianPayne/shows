@@ -1,35 +1,31 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { EventsTable } from "@/components/EventsTable";
 import { EventDetailView } from "@/components/EventDetail";
 import { EventForm } from "@/components/EventForm";
 import * as api from "@/api";
+import { invalidateStatsCache } from "@/pages/StatsPage";
 import type { EventDetail, CreateEventInput } from "@/types";
 
+// Cache events outside the component so they persist across navigations
+let eventsCache: EventDetail[] = [];
+export function invalidateEventsCache() { eventsCache = []; }
+
 export function EventsListPage() {
-  const [events, setEvents] = useState<EventDetail[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<EventDetail[]>(eventsCache);
   const [search, setSearch] = useState("");
 
-  const loadEvents = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await api.getEvents();
-      setEvents(data);
-    } catch (err) {
-      console.error("Failed to load events:", err);
-    }
-    setLoading(false);
-  }, []);
-
   useEffect(() => {
-    loadEvents();
-  }, [loadEvents]);
-
-  if (loading) {
-    return <p className="text-muted-foreground">Loading events...</p>;
-  }
+    // Only fetch if cache is empty (first load)
+    // Subsequent mounts use the cache directly, no re-render
+    if (eventsCache.length === 0) {
+      api.getEvents().then((data) => {
+        eventsCache = data;
+        setEvents(data);
+      });
+    }
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -39,7 +35,7 @@ export function EventsListPage() {
           placeholder="Search events, artists, venues, locations..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
+          className="w-1/2 mx-auto"
         />
       </div>
       <EventsTable events={events} search={search} />
@@ -75,12 +71,16 @@ export function EventDetailPage() {
 
   const handleDelete = async (eventId: number) => {
     await api.deleteEvent(eventId);
+    invalidateEventsCache();
+    invalidateStatsCache();
     navigate("/events");
   };
 
   const handleToggleCancelled = async (eventId: number, cancelled: boolean) => {
     await api.setEventCancelled(eventId, cancelled);
     setEvent({ ...event, cancelled });
+    invalidateEventsCache();
+    invalidateStatsCache();
   };
 
   return (
@@ -121,6 +121,8 @@ export function EventEditPage() {
 
   const handleUpdate = async (input: CreateEventInput) => {
     await api.updateEvent(event.id, input);
+    invalidateEventsCache();
+    invalidateStatsCache();
     navigate(`/events/${event.id}`, { replace: true });
   };
 
@@ -138,6 +140,8 @@ export function EventNewPage() {
 
   const handleCreate = async (input: CreateEventInput) => {
     const newId = await api.createEvent(input);
+    invalidateEventsCache();
+    invalidateStatsCache();
     navigate(`/events/${newId}`);
   };
 

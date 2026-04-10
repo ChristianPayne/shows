@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
@@ -13,20 +13,24 @@ import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
 import type { ArtistWithCount, EventDetail, ArtistStats, ArtistLinks } from "@/types";
 
+let artistsCache: ArtistWithCount[] = [];
+let artistEventsCache = new Map<number, string[]>();
+
 export function ArtistsListPage() {
   const navigate = useNavigate();
-  const [artists, setArtists] = useState<ArtistWithCount[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [artists, setArtists] = useState<ArtistWithCount[]>(artistsCache);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const [artistEvents, setArtistEvents] = useState<Map<number, string[]>>(new Map());
+  const [artistEvents, setArtistEvents] = useState<Map<number, string[]>>(artistEventsCache);
 
   useEffect(() => {
-    api.getArtists().then(setArtists).finally(() => setLoading(false));
-    // Build artist → event names map for tooltips
-    api.getEvents().then((events) => {
+    if (artistsCache.length === 0) {
+      api.getArtists().then((data) => { artistsCache = data; setArtists(data); });
+    }
+    if (artistEventsCache.size === 0) {
+      api.getEvents().then((events) => {
       const map = new Map<number, string[]>();
       for (const event of events) {
         for (const set of event.artist_sets) {
@@ -37,8 +41,10 @@ export function ArtistsListPage() {
           }
         }
       }
+      artistEventsCache = map;
       setArtistEvents(map);
     });
+    }
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -62,10 +68,6 @@ export function ArtistsListPage() {
     });
   }, [artists, search, sortBy, sortDir]);
 
-  if (loading) {
-    return <p className="text-muted-foreground">Loading artists...</p>;
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -74,7 +76,7 @@ export function ArtistsListPage() {
           placeholder="Search artists..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
+          className="w-1/2 mx-auto"
         />
       </div>
       <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
@@ -299,23 +301,6 @@ export function ArtistDetailPage() {
             <StatCard label="Venues" value={String(stats.unique_venues)} />
           </div>
 
-          {stats.related_artists.length > 0 && (
-            <div>
-              <h4 className="text-sm text-muted-foreground mb-2">Frequently Seen With</h4>
-              <div className="flex flex-wrap gap-2">
-                {stats.related_artists.map((ra) => (
-                  <Link
-                    key={ra.id}
-                    to={`/artists/${ra.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm hover:border-primary/30 transition-colors"
-                  >
-                    <span>{ra.name}</span>
-                    <span className="text-xs text-muted-foreground">{ra.shared_events}x</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
