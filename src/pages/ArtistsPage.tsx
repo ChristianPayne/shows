@@ -1,25 +1,44 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
-import { ArrowUpDown } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { ArrowUpDown, ExternalLink as ExternalLinkIcon } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { MergeDialog } from "@/components/MergeDialog";
+import { MatchPickerDialog } from "@/components/MatchPickerDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
-import type { EntityWithCount, EventDetail } from "@/types";
+import type { ArtistWithCount, EventDetail, ArtistStats, ArtistLinks } from "@/types";
 
 export function ArtistsListPage() {
   const navigate = useNavigate();
-  const [artists, setArtists] = useState<EntityWithCount[]>([]);
+  const [artists, setArtists] = useState<ArtistWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
+  const [artistEvents, setArtistEvents] = useState<Map<number, string[]>>(new Map());
+
   useEffect(() => {
     api.getArtists().then(setArtists).finally(() => setLoading(false));
+    // Build artist → event names map for tooltips
+    api.getEvents().then((events) => {
+      const map = new Map<number, string[]>();
+      for (const event of events) {
+        for (const set of event.artist_sets) {
+          for (const artist of set.artists) {
+            const list = map.get(artist.id) ?? [];
+            list.push(event.name);
+            map.set(artist.id, list);
+          }
+        }
+      }
+      setArtistEvents(map);
+    });
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -80,13 +99,37 @@ export function ArtistsListPage() {
               onClick={() => navigate(`/artists/${artist.id}`)}
             >
               <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
-              <span className="w-48 text-sm font-medium truncate shrink-0">{artist.name}</span>
-              <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
-                <div
-                  className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
-                  style={{ width: `${pct}%` }}
-                />
+              <div className="flex-1 min-w-0 flex items-center gap-2 truncate">
+                <span className="text-sm font-medium">{artist.name}</span>
+                {artist.genre && artist.genre !== "" && (
+                  <span className="text-xs text-muted-foreground">{artist.genre}</span>
+                )}
+                {artist.country && artist.country !== "" && (
+                  <span className="text-xs text-muted-foreground">· {artist.country}</span>
+                )}
+                {artist.artist_type && artist.artist_type !== "" && (
+                  <span className="text-xs text-muted-foreground">· {artist.artist_type}</span>
+                )}
               </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="w-1/4 shrink-0 h-5 bg-muted rounded overflow-hidden relative">
+                    <div
+                      className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </TooltipTrigger>
+                {artistEvents.has(artist.id) && (
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <div className="flex flex-col gap-0.5">
+                      {artistEvents.get(artist.id)!.map((name, j) => (
+                        <span key={j}>{name}</span>
+                      ))}
+                    </div>
+                  </TooltipContent>
+                )}
+              </Tooltip>
               <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{artist.event_count}</span>
             </button>
           );
@@ -102,9 +145,12 @@ export function ArtistDetailPage() {
   const navigate = useNavigate();
   const artistId = Number(id);
 
-  const [artists, setArtists] = useState<EntityWithCount[]>([]);
+  const [artists, setArtists] = useState<ArtistWithCount[]>([]);
   const [events, setEvents] = useState<EventDetail[]>([]);
+  const [stats, setStats] = useState<ArtistStats | null>(null);
+  const [artistLinks, setArtistLinks] = useState<ArtistLinks | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [matchOpen, setMatchOpen] = useState(false);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
@@ -112,7 +158,11 @@ export function ArtistDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (artistId) api.getEventsForArtist(artistId).then(setEvents);
+    if (artistId) {
+      api.getEventsForArtist(artistId).then(setEvents);
+      api.getArtistLinks(artistId).then(setArtistLinks);
+      api.getArtistStats(artistId).then(setStats);
+    }
   }, [artistId]);
 
   const artist = useMemo(
@@ -123,7 +173,8 @@ export function ArtistDetailPage() {
   if (!artist) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-4">
         <BackButton />
         <div className="flex-1">
@@ -143,19 +194,29 @@ export function ArtistDetailPage() {
           ) : (
             <h1 className="text-xl font-semibold">{artist.name}</h1>
           )}
-          <p className="text-sm text-muted-foreground">
-            {artist.event_count} event{artist.event_count !== 1 ? "s" : ""}
-          </p>
         </div>
         <ActionsMenu
           onEdit={() => setEditing(true)}
           onMerge={() => setMergeOpen(true)}
+          onFixMatch={() => setMatchOpen(true)}
           onDelete={artist.event_count === 0 ? async () => {
             await api.deleteArtist(artist.id);
             navigate("/artists");
           } : undefined}
         />
       </div>
+
+      <MatchPickerDialog
+        open={matchOpen}
+        onClose={() => setMatchOpen(false)}
+        artistId={artist.id}
+        artistName={artist.name}
+        onApplied={() => {
+          api.getArtistStats(artistId).then(setStats);
+          api.getArtistLinks(artistId).then(setArtistLinks);
+        }}
+      />
+
       <MergeDialog
         open={mergeOpen}
         onClose={() => setMergeOpen(false)}
@@ -167,7 +228,125 @@ export function ArtistDetailPage() {
           navigate("/artists");
         }}
       />
+
+      {/* MusicBrainz Profile */}
+      {stats && (stats.genre || stats.country || stats.artist_type || stats.disambiguation) && (
+        <div className="rounded-lg border p-4 space-y-3">
+          {stats.disambiguation && (
+            <p className="text-sm text-muted-foreground">{stats.disambiguation}</p>
+          )}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            {stats.genre && (
+              <span className="font-medium">{stats.genre}</span>
+            )}
+            {stats.artist_type && (
+              <span className="text-muted-foreground">{stats.artist_type}</span>
+            )}
+            {stats.country && (
+              <span className="text-muted-foreground">{stats.country}</span>
+            )}
+            {stats.begin_year && (
+              <span className="text-muted-foreground">
+                {stats.begin_year}–{stats.active === false ? stats.end_year ?? "?" : "present"}
+              </span>
+            )}
+          </div>
+          {stats.tags && (
+            <div className="flex flex-wrap gap-1.5">
+              {stats.tags.split(", ").map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+          {artistLinks && (
+            <div className="flex flex-wrap gap-3 pt-1">
+              {artistLinks.link_spotify && (
+                <ExternalLink url={artistLinks.link_spotify} label="Spotify" />
+              )}
+              {artistLinks.link_instagram && (
+                <ExternalLink url={artistLinks.link_instagram} label="Instagram" />
+              )}
+              {artistLinks.link_youtube && (
+                <ExternalLink url={artistLinks.link_youtube} label="YouTube" />
+              )}
+              {artistLinks.link_soundcloud && (
+                <ExternalLink url={artistLinks.link_soundcloud} label="SoundCloud" />
+              )}
+              {artistLinks.link_bandcamp && (
+                <ExternalLink url={artistLinks.link_bandcamp} label="Bandcamp" />
+              )}
+              {artistLinks.link_website && (
+                <ExternalLink url={artistLinks.link_website} label="Website" />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Your Attendance */}
+      {stats && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Your History</h3>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatCard label="Times Seen" value={String(artist.event_count)} />
+            <StatCard label="First Seen" value={stats.first_seen ? formatDate(stats.first_seen) : "—"} />
+            <StatCard label="Last Seen" value={stats.last_seen ? formatDate(stats.last_seen) : "—"} />
+            <StatCard label="Venues" value={String(stats.unique_venues)} />
+          </div>
+
+          {stats.related_artists.length > 0 && (
+            <div>
+              <h4 className="text-sm text-muted-foreground mb-2">Frequently Seen With</h4>
+              <div className="flex flex-wrap gap-2">
+                {stats.related_artists.map((ra) => (
+                  <Link
+                    key={ra.id}
+                    to={`/artists/${ra.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm hover:border-primary/30 transition-colors"
+                  >
+                    <span>{ra.name}</span>
+                    <span className="text-xs text-muted-foreground">{ra.shared_events}x</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Events */}
       <EventsTable events={events} />
     </div>
   );
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-lg font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function ExternalLink({ url, label }: { url: string; label: string }) {
+  return (
+    <button
+      onClick={() => openUrl(url)}
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+    >
+      <ExternalLinkIcon className="h-3 w-3" />
+      {label}
+    </button>
+  );
+}
+
+function formatDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split("-");
+  return `${month}/${day}/${year}`;
 }

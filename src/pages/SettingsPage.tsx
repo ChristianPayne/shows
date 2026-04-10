@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -13,7 +14,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown } from "lucide-react";
+import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown, Music } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { ACCENT_PRESETS } from "@/lib/accent";
 import * as api from "@/api";
@@ -25,6 +26,15 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
+  const [fetchingGenres, setFetchingGenres] = useState(false);
+
+  useEffect(() => {
+    const unlisten = listen<{ done: boolean }>("genre-progress", (event) => {
+      setFetchingGenres(!event.payload.done);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
   const [importError, setImportError] = useState("");
   const [importSuccess, setImportSuccess] = useState<ImportResult | null>(null);
   const [importing, setImporting] = useState(false);
@@ -139,6 +149,21 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Data</h2>
 
+        {/* Genres */}
+        <div className="rounded-lg border divide-y">
+          <button
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            disabled={fetchingGenres}
+            onClick={() => { setFetchingGenres(true); api.fetchGenres(); }}
+          >
+            <Music className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="text-left">
+              <p className="font-medium">{fetchingGenres ? "Fetching..." : "Fetch Genres"}</p>
+              <p className="text-xs text-muted-foreground">Look up genres from MusicBrainz for artists missing them</p>
+            </div>
+          </button>
+        </div>
+
         {/* CSV */}
         <div className="rounded-lg border divide-y">
           <button
@@ -149,7 +174,7 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
             <Upload className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="text-left">
               <p className="font-medium">{importing ? "Importing..." : "Import CSV"}</p>
-              <p className="text-xs text-muted-foreground">Load events from a spreadsheet</p>
+              <p className="text-xs text-muted-foreground">Import events from a CSV — dates, names, artists, venues, locations only</p>
             </div>
           </button>
           <input
@@ -179,7 +204,7 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
             <FileDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="text-left">
               <p className="font-medium">Export CSV</p>
-              <p className="text-xs text-muted-foreground">Save all events as a spreadsheet</p>
+              <p className="text-xs text-muted-foreground">Export events to CSV — dates, names, artists, venues, locations only</p>
             </div>
           </button>
         </div>
@@ -192,7 +217,7 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
                 <RotateCcw className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="text-left">
                   <p className="font-medium">Restore from Backup</p>
-                  <p className="text-xs text-muted-foreground">Replace all data with a backup file</p>
+                  <p className="text-xs text-muted-foreground">Restore from a full database backup — overwrites everything</p>
                 </div>
               </button>
             </AlertDialogTrigger>
@@ -219,7 +244,7 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
             <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="text-left">
               <p className="font-medium">Export Backup</p>
-              <p className="text-xs text-muted-foreground">Save a copy of the database</p>
+              <p className="text-xs text-muted-foreground">Full database backup — includes all data, metadata, genres, links, and settings</p>
             </div>
           </button>
         </div>

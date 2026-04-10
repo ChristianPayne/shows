@@ -7,6 +7,11 @@ import type {
   ImportResult,
   CreateEventInput,
   ArtistEntry,
+  ArtistWithCount,
+  ArtistContextSet,
+  ArtistStats,
+  ArtistLinks,
+  MusicBrainzMatch,
 } from "./types";
 
 // ── Events ──
@@ -15,6 +20,9 @@ export const getEvents = () => invoke<EventDetail[]>("get_events");
 
 export const getEvent = (eventId: number) =>
   invoke<EventDetail | null>("get_event", { eventId });
+
+export const getArtistContext = (eventId: number, eventDate: string) =>
+  invoke<ArtistContextSet[]>("get_artist_context", { eventId, eventDate });
 
 export const createEvent = (input: CreateEventInput) =>
   invoke<number>("create_event", { input });
@@ -33,7 +41,13 @@ export const deleteEvent = (eventId: number) =>
 
 // ── Entities ──
 
-export const getArtists = () => invoke<EntityWithCount[]>("get_artists");
+export const getArtists = () => invoke<ArtistWithCount[]>("get_artists");
+
+export const getArtistStats = (artistId: number) =>
+  invoke<ArtistStats>("get_artist_stats", { artistId });
+
+export const getArtistLinks = (artistId: number) =>
+  invoke<ArtistLinks | null>("get_artist_links", { artistId });
 
 export const getVenues = () => invoke<EntityWithCount[]>("get_venues");
 
@@ -103,6 +117,19 @@ export const getSetting = (key: string) =>
 
 export const setSetting = (key: string, value: string) =>
   invoke<void>("set_setting", { key, value });
+
+// ── Genres ──
+
+export const fetchGenres = () => invoke<number>("fetch_genres");
+
+export const searchMusicBrainz = (artistName: string, limit?: number) =>
+  invoke<MusicBrainzMatch[]>("search_musicbrainz", { artistName, limit });
+
+export const applyMusicBrainzMatch = (artistId: number, mbid: string) =>
+  invoke<void>("apply_musicbrainz_match", { artistId, mbid });
+
+export const clearArtistMetadata = (artistId: number) =>
+  invoke<void>("clear_artist_metadata", { artistId });
 
 // ── Maintenance ──
 

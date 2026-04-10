@@ -47,6 +47,21 @@ pub struct ArtistSet {
     pub artists: Vec<ArtistInfo>,
 }
 
+/// Enriched artist info for event detail view — includes attendance context.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistContext {
+    pub id: i64,
+    pub name: String,
+    pub set_group: Option<i64>,
+    pub total_events: i64,
+    pub first_event: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistContextSet {
+    pub artists: Vec<ArtistContext>,
+}
+
 /// Event with all related data joined — used for list and detail views.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventDetail {
@@ -102,6 +117,31 @@ pub struct EventRow {
     pub state: String,
 }
 
+/// Detailed stats for a single artist.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistStats {
+    pub genre: Option<String>,
+    pub tags: Option<String>,
+    pub country: Option<String>,
+    pub artist_type: Option<String>,
+    pub begin_year: Option<String>,
+    pub end_year: Option<String>,
+    pub active: Option<bool>,
+    pub disambiguation: Option<String>,
+    pub first_seen: Option<String>,
+    pub last_seen: Option<String>,
+    pub unique_venues: i64,
+    pub unique_locations: i64,
+    pub related_artists: Vec<RelatedArtist>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct RelatedArtist {
+    pub id: i64,
+    pub name: String,
+    pub shared_events: i64,
+}
+
 /// Stats summary for the dashboard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stats {
@@ -140,6 +180,16 @@ pub struct EntityWithCount {
     pub id: i64,
     pub name: String,
     pub event_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ArtistWithCount {
+    pub id: i64,
+    pub name: String,
+    pub event_count: i64,
+    pub genre: Option<String>,
+    pub country: Option<String>,
+    pub artist_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

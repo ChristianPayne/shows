@@ -6,7 +6,32 @@ use sqlx::SqlitePool;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-/// Initialize the SQLite database, run migrations, and return the connection pool.
+/// All migrations in order. Each runs exactly once.
+/// The index + 1 is the version number.
+const MIGRATIONS: &[&str] = &[
+    // v1: initial schema
+    include_str!("../../migrations/001_initial_schema.sql"),
+    // v2: add set_group to event_artists for b2b support
+    include_str!("../../migrations/002_add_set_group.sql"),
+    // v3: split b2b artists (handled in Rust, marker only)
+    "", // procedural migration — handled below
+    // v4: add end_date to events
+    include_str!("../../migrations/004_add_end_date.sql"),
+    // v5: add cancelled flag to events
+    include_str!("../../migrations/005_add_cancelled.sql"),
+    // v6: add genre to artists
+    include_str!("../../migrations/006_add_genre.sql"),
+    // v7: add country, type, tags, active period to artists
+    include_str!("../../migrations/007_add_artist_metadata.sql"),
+    // v8: add disambiguation to artists
+    include_str!("../../migrations/008_add_disambiguation.sql"),
+    // v9: add mbid to artists for tracking manual matches
+    include_str!("../../migrations/009_add_mbid.sql"),
+    // v10: add external links to artists
+    include_str!("../../migrations/010_add_artist_links.sql"),
+];
+
+/// Initialize the SQLite database, run pending migrations, and return the connection pool.
 pub async fn init(app_data_dir: PathBuf) -> Result<SqlitePool, sqlx::Error> {
     std::fs::create_dir_all(&app_data_dir).ok();
 
@@ -23,53 +48,40 @@ pub async fn init(app_data_dir: PathBuf) -> Result<SqlitePool, sqlx::Error> {
         .connect_with(options)
         .await?;
 
-    // Run migrations embedded at compile time
-    let migration_sql = include_str!("../../migrations/001_initial_schema.sql");
-    sqlx::raw_sql(migration_sql).execute(&pool).await?;
+    // Create the version tracking table if it doesn't exist
+    sqlx::raw_sql(
+        "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)"
+    )
+    .execute(&pool)
+    .await?;
 
-    // Migration 002: add set_group column (idempotent check)
-    let has_set_group: bool = sqlx::query_scalar::<_, String>(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='event_artists'"
+    // Get current version (0 if no migrations have run)
+    let current_version: i64 = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(version) FROM schema_version"
     )
     .fetch_one(&pool)
-    .await
-    .map(|sql| sql.contains("set_group"))
-    .unwrap_or(false);
+    .await?
+    .unwrap_or(0);
 
-    if !has_set_group {
-        let migration_002 = include_str!("../../migrations/002_add_set_group.sql");
-        sqlx::raw_sql(migration_002).execute(&pool).await?;
-    }
+    // Run any pending migrations
+    for (i, sql) in MIGRATIONS.iter().enumerate() {
+        let version = (i + 1) as i64;
+        if version <= current_version {
+            continue;
+        }
 
-    // Migration 003: split existing "b2b" artists into separate entities
-    migrate_b2b_artists(&pool).await?;
+        // v3 is a procedural migration
+        if version == 3 {
+            migrate_b2b_artists(&pool).await?;
+        } else if !sql.is_empty() {
+            sqlx::raw_sql(sql).execute(&pool).await?;
+        }
 
-    // Migration 004: add end_date column
-    let has_end_date: bool = sqlx::query_scalar::<_, String>(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='events'"
-    )
-    .fetch_one(&pool)
-    .await
-    .map(|sql| sql.contains("end_date"))
-    .unwrap_or(false);
-
-    if !has_end_date {
-        let migration_004 = include_str!("../../migrations/004_add_end_date.sql");
-        sqlx::raw_sql(migration_004).execute(&pool).await?;
-    }
-
-    // Migration 005: add cancelled column
-    let has_cancelled: bool = sqlx::query_scalar::<_, String>(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='events'"
-    )
-    .fetch_one(&pool)
-    .await
-    .map(|sql| sql.contains("cancelled"))
-    .unwrap_or(false);
-
-    if !has_cancelled {
-        let migration_005 = include_str!("../../migrations/005_add_cancelled.sql");
-        sqlx::raw_sql(migration_005).execute(&pool).await?;
+        // Record that this migration has been applied
+        sqlx::query("INSERT INTO schema_version (version) VALUES (?1)")
+            .bind(version)
+            .execute(&pool)
+            .await?;
     }
 
     Ok(pool)
@@ -77,9 +89,7 @@ pub async fn init(app_data_dir: PathBuf) -> Result<SqlitePool, sqlx::Error> {
 
 /// Split any artist whose name contains " b2b " into separate artists
 /// and update event_artists links with proper set_groups.
-/// Idempotent — only processes artists that still have "b2b" in their name.
 async fn migrate_b2b_artists(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    // Find all artists with b2b in their name (case-insensitive)
     let b2b_artists: Vec<(i64, String)> = sqlx::query_as(
         "SELECT id, name FROM artists WHERE name LIKE '%b2b%'"
     )
@@ -87,13 +97,11 @@ async fn migrate_b2b_artists(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .await?;
 
     for (old_artist_id, old_name) in b2b_artists {
-        // Split the name on " b2b " (case-insensitive)
         let parts = split_b2b_name(&old_name);
         if parts.len() <= 1 {
             continue;
         }
 
-        // Find all events this artist is linked to
         let event_ids: Vec<(i64,)> = sqlx::query_as(
             "SELECT event_id FROM event_artists WHERE artist_id = ?1"
         )
@@ -102,7 +110,6 @@ async fn migrate_b2b_artists(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         .await?;
 
         for (event_id,) in &event_ids {
-            // Determine the next available set_group for this event
             let max_group: Option<i64> = sqlx::query_scalar(
                 "SELECT MAX(set_group) FROM event_artists WHERE event_id = ?1"
             )
@@ -111,17 +118,14 @@ async fn migrate_b2b_artists(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             .await?;
             let set_group = max_group.unwrap_or(0) + 1;
 
-            // Remove the old link
             sqlx::query("DELETE FROM event_artists WHERE event_id = ?1 AND artist_id = ?2")
                 .bind(event_id)
                 .bind(old_artist_id)
                 .execute(pool)
                 .await?;
 
-            // Create/find each individual artist and link them
             for part in &parts {
                 let artist_id = find_or_create_artist_raw(pool, part).await?;
-                // Insert, ignoring if this artist is already linked to this event
                 sqlx::query(
                     "INSERT OR IGNORE INTO event_artists (event_id, artist_id, set_group) VALUES (?1, ?2, ?3)"
                 )
@@ -133,7 +137,6 @@ async fn migrate_b2b_artists(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             }
         }
 
-        // Delete the old b2b artist if it has no remaining links
         sqlx::query(
             "DELETE FROM artists WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM event_artists WHERE artist_id = ?1)"
         )

@@ -1,0 +1,6 @@
+ALTER TABLE artists ADD COLUMN country TEXT;
+ALTER TABLE artists ADD COLUMN artist_type TEXT;
+ALTER TABLE artists ADD COLUMN tags TEXT;
+ALTER TABLE artists ADD COLUMN begin_year TEXT;
+ALTER TABLE artists ADD COLUMN end_year TEXT;
+ALTER TABLE artists ADD COLUMN active INTEGER;

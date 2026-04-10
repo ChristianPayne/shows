@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import * as api from "@/api";
-import type { Stats } from "@/types";
+import type { Stats, EventDetail } from "@/types";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -11,11 +12,23 @@ const MONTH_NAMES = [
 
 export function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [events, setEvents] = useState<EventDetail[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getStats().then(setStats).finally(() => setLoading(false));
+    Promise.all([api.getStats(), api.getEvents()]).then(([s, e]) => {
+      setStats(s);
+      setEvents(e);
+    }).finally(() => setLoading(false));
   }, []);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = useMemo(
+    () => events
+      .filter((e) => e.date >= today && !e.cancelled)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [events, today]
+  );
 
   if (loading || !stats) {
     return <p className="text-muted-foreground">Loading dashboard...</p>;
@@ -32,6 +45,44 @@ export function StatsPage() {
         <StatCard label="Venues Visited" value={stats.total_venues} to="/venues" />
         <StatCard label="Locations" value={stats.total_locations} to="/locations" />
       </div>
+
+      {upcoming.length > 0 && (
+        <>
+          <div>
+            <h2 className="text-lg font-semibold mb-3">Upcoming</h2>
+            <div className="space-y-2">
+              {upcoming.map((event) => (
+                <Link
+                  key={event.id}
+                  to={`/events/${event.id}`}
+                  className="flex items-start gap-3 rounded-lg border p-3 hover:border-primary/50 transition-colors"
+                >
+                  <div className="flex flex-col items-center text-center shrink-0 w-12">
+                    <span className="text-xs text-muted-foreground uppercase">
+                      {new Date(event.date + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
+                    </span>
+                    <span className="text-xl font-bold">
+                      {new Date(event.date + "T00:00:00").getDate()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">{event.name}</p>
+                    <p className="text-sm text-muted-foreground">{event.venue} — {event.city}, {event.state}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {event.artist_sets.flatMap((set) =>
+                        set.artists.map((a) => (
+                          <Badge key={a.id} variant="outline" className="text-xs">{a.name}</Badge>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+          <Separator />
+        </>
+      )}
 
       <div className="grid gap-8 md:grid-cols-2">
         {/* Top artists */}

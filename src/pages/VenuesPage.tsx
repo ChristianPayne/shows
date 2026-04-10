@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUpDown } from "lucide-react";
 import { MergeDialog } from "@/components/MergeDialog";
 import { EditableName } from "@/components/EditableName";
@@ -18,8 +19,19 @@ export function VenuesListPage() {
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
+  const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(new Map());
+
   useEffect(() => {
     api.getVenues().then(setVenues).finally(() => setLoading(false));
+    api.getEvents().then((events) => {
+      const map = new Map<number, string[]>();
+      for (const event of events) {
+        const list = map.get(event.venue_id) ?? [];
+        list.push(event.name);
+        map.set(event.venue_id, list);
+      }
+      setVenueEvents(map);
+    });
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -81,12 +93,25 @@ export function VenuesListPage() {
               >
                 <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
                 <span className="w-48 text-sm font-medium truncate shrink-0">{venue.name}</span>
-                <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
-                  <div
-                    className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
+                      <div
+                        className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  {venueEvents.has(venue.id) && (
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      <div className="flex flex-col gap-0.5">
+                        {venueEvents.get(venue.id)!.map((name, j) => (
+                          <span key={j}>{name}</span>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
                 <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{venue.event_count}</span>
               </button>
             );

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { ScrollRestore } from "@/components/ScrollRestore";
-import { MemoryRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { StatusBar } from "@/components/StatusBar";
+import { CommandPalette } from "@/components/CommandPalette";
+import { MemoryRouter, Routes, Route, NavLink, Navigate, useNavigate } from "react-router-dom";
 import { EventsListPage, EventDetailPage, EventEditPage, EventNewPage } from "@/pages/EventsPage";
 import { ArtistsListPage, ArtistDetailPage } from "@/pages/ArtistsPage";
 import { VenuesListPage, VenueDetailPage } from "@/pages/VenuesPage";
@@ -9,6 +11,7 @@ import { StatsPage } from "@/pages/StatsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { cn } from "@/lib/utils";
 import { applyAccent } from "@/lib/accent";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import * as api from "@/api";
 import {
   Calendar,
@@ -34,7 +37,18 @@ const NAV_ITEMS = [
 const SETTINGS_NAV = { to: "/settings", label: "Settings", icon: <Settings className="h-4 w-4" /> };
 
 function AppLayout() {
+  const navigate = useNavigate();
   const mainRef = useRef<HTMLElement>(null);
+
+  // Mouse back/forward buttons
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (e.button === 3) { e.preventDefault(); navigate(-1); }
+      if (e.button === 4) { e.preventDefault(); navigate(1); }
+    };
+    window.addEventListener("mouseup", handler);
+    return () => window.removeEventListener("mouseup", handler);
+  }, [navigate]);
   const [dark, setDark] = useState(
     document.documentElement.classList.contains("dark")
   );
@@ -67,7 +81,8 @@ function AppLayout() {
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="flex flex-col h-screen">
+    <div className="flex flex-1 min-h-0">
       <nav className="w-48 border-r bg-sidebar-background p-4 flex flex-col">
         <div className="flex items-center justify-between px-2 mb-4">
           <h1 className="text-lg font-bold">Shows</h1>
@@ -173,14 +188,19 @@ function AppLayout() {
         </Routes>
       </main>
     </div>
+    <StatusBar />
+    <CommandPalette />
+    </div>
   );
 }
 
 function App() {
   return (
-    <MemoryRouter initialEntries={["/"]}>
-      <AppLayout />
-    </MemoryRouter>
+    <TooltipProvider delayDuration={100}>
+      <MemoryRouter initialEntries={["/"]}>
+        <AppLayout />
+      </MemoryRouter>
+    </TooltipProvider>
   );
 }
 

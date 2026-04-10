@@ -283,6 +283,162 @@ pub async fn delete_location(pool: &SqlitePool, location_id: i64) -> Result<(), 
     Ok(())
 }
 
+// ── Artist detail stats ──
+
+pub async fn get_artist_stats(pool: &SqlitePool, artist_id: i64) -> Result<ArtistStats, sqlx::Error> {
+    // Artist metadata from MusicBrainz
+    let meta: Option<(Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<bool>, Option<String>)> = sqlx::query_as(
+        "SELECT genre, tags, country, artist_type, begin_year, end_year, active, disambiguation FROM artists WHERE id = ?1"
+    )
+    .bind(artist_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let (genre, tags, country, artist_type, begin_year, end_year, active, disambiguation) = meta.unwrap_or_default();
+    let genre = genre.filter(|g| !g.is_empty());
+    let tags = tags.filter(|t| !t.is_empty());
+    let country = country.filter(|c| !c.is_empty());
+    let disambiguation = disambiguation.filter(|d| !d.is_empty());
+
+    // First/last seen dates
+    let dates: Option<(String, String)> = sqlx::query_as(
+        "SELECT MIN(e.date), MAX(e.date) FROM events e
+         JOIN event_artists ea ON e.id = ea.event_id
+         WHERE ea.artist_id = ?1 AND e.date <= date('now')"
+    )
+    .bind(artist_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let (first_seen, last_seen) = match dates {
+        Some((f, l)) => (Some(f), Some(l)),
+        None => (None, None),
+    };
+
+    // Unique venues
+    let (unique_venues,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT e.venue_id) FROM events e
+         JOIN event_artists ea ON e.id = ea.event_id
+         WHERE ea.artist_id = ?1"
+    )
+    .bind(artist_id)
+    .fetch_one(pool)
+    .await?;
+
+    // Unique locations
+    let (unique_locations,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT e.location_id) FROM events e
+         JOIN event_artists ea ON e.id = ea.event_id
+         WHERE ea.artist_id = ?1"
+    )
+    .bind(artist_id)
+    .fetch_one(pool)
+    .await?;
+
+    // Related artists — other artists who appear at the same events, ranked by co-occurrence
+    let related_artists: Vec<RelatedArtist> = sqlx::query_as(
+        "SELECT a.id, a.name, COUNT(*) as shared_events
+         FROM artists a
+         JOIN event_artists ea ON a.id = ea.artist_id
+         WHERE ea.event_id IN (
+             SELECT event_id FROM event_artists WHERE artist_id = ?1
+         )
+         AND a.id != ?1
+         GROUP BY a.id
+         ORDER BY shared_events DESC
+         LIMIT 10"
+    )
+    .bind(artist_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(ArtistStats {
+        genre,
+        tags,
+        country,
+        artist_type,
+        begin_year,
+        end_year,
+        active,
+        disambiguation,
+        first_seen,
+        last_seen,
+        unique_venues,
+        unique_locations,
+        related_artists,
+    })
+}
+
+// ── Enriched artist context for event detail ──
+
+/// For each artist on a given event, return their total event count
+/// and whether this event is the first time they were seen.
+pub async fn get_artist_context_for_event(
+    pool: &SqlitePool,
+    event_id: i64,
+    event_date: &str,
+) -> Result<Vec<ArtistContextSet>, sqlx::Error> {
+    let artists: Vec<ArtistInfo> = sqlx::query_as(
+        "SELECT a.id, a.name, ea.set_group FROM artists a
+         JOIN event_artists ea ON a.id = ea.artist_id
+         WHERE ea.event_id = ?1
+         ORDER BY ea.set_group NULLS LAST, a.name",
+    )
+    .bind(event_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut contexts: Vec<ArtistContext> = Vec::new();
+
+    for artist in &artists {
+        // Total number of events this artist appears in
+        let (total,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM event_artists WHERE artist_id = ?1"
+        )
+        .bind(artist.id)
+        .fetch_one(pool)
+        .await?;
+
+        // Earliest event date for this artist
+        let (earliest,): (String,) = sqlx::query_as(
+            "SELECT MIN(e.date) FROM events e
+             JOIN event_artists ea ON e.id = ea.event_id
+             WHERE ea.artist_id = ?1"
+        )
+        .bind(artist.id)
+        .fetch_one(pool)
+        .await?;
+
+        contexts.push(ArtistContext {
+            id: artist.id,
+            name: artist.name.clone(),
+            set_group: artist.set_group,
+            total_events: total,
+            first_event: earliest == event_date,
+        });
+    }
+
+    // Group into sets, same logic as EventDetail::group_artists
+    let mut sets: Vec<ArtistContextSet> = Vec::new();
+    let mut group_map: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+
+    for ctx in contexts {
+        if let Some(group) = ctx.set_group {
+            if let Some(&idx) = group_map.get(&group) {
+                sets[idx].artists.push(ctx);
+            } else {
+                let idx = sets.len();
+                group_map.insert(group, idx);
+                sets.push(ArtistContextSet { artists: vec![ctx] });
+            }
+        } else {
+            sets.push(ArtistContextSet { artists: vec![ctx] });
+        }
+    }
+
+    Ok(sets)
+}
+
 // ── Query operations ──
 
 pub async fn get_all_events(pool: &SqlitePool) -> Result<Vec<EventDetail>, sqlx::Error> {
@@ -378,9 +534,9 @@ pub async fn get_event_by_id(
 
 pub async fn get_artists_with_counts(
     pool: &SqlitePool,
-) -> Result<Vec<EntityWithCount>, sqlx::Error> {
-    let rows: Vec<EntityWithCount> = sqlx::query_as(
-        "SELECT a.id, a.name, COUNT(ea.event_id) as event_count
+) -> Result<Vec<ArtistWithCount>, sqlx::Error> {
+    let rows: Vec<ArtistWithCount> = sqlx::query_as(
+        "SELECT a.id, a.name, COUNT(ea.event_id) as event_count, a.genre, a.country, a.artist_type
          FROM artists a
          LEFT JOIN event_artists ea ON a.id = ea.artist_id
          GROUP BY a.id

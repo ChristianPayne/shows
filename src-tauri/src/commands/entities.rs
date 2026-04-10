@@ -1,11 +1,11 @@
 use sqlx::SqlitePool;
 use tauri::State;
 
-use crate::db::models::{EntityWithCount, EventDetail, LocationWithCount};
+use crate::db::models::{ArtistStats, ArtistWithCount, EntityWithCount, EventDetail, LocationWithCount};
 use crate::db::queries;
 
 #[tauri::command]
-pub async fn get_artists(pool: State<'_, SqlitePool>) -> Result<Vec<EntityWithCount>, String> {
+pub async fn get_artists(pool: State<'_, SqlitePool>) -> Result<Vec<ArtistWithCount>, String> {
     queries::get_artists_with_counts(&pool)
         .await
         .map_err(|e| e.to_string())
@@ -51,6 +51,13 @@ pub async fn get_events_for_location(
     location_id: i64,
 ) -> Result<Vec<EventDetail>, String> {
     queries::get_events_for_location(&pool, location_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_artist_stats(pool: State<'_, SqlitePool>, artist_id: i64) -> Result<ArtistStats, String> {
+    queries::get_artist_stats(&pool, artist_id)
         .await
         .map_err(|e| e.to_string())
 }

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUpDown } from "lucide-react";
 import { MergeDialog } from "@/components/MergeDialog";
 import { EditableLocation } from "@/components/EditableName";
@@ -18,8 +19,19 @@ export function LocationsListPage() {
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
+  const [locationEvents, setLocationEvents] = useState<Map<number, string[]>>(new Map());
+
   useEffect(() => {
     api.getLocations().then(setLocations).finally(() => setLoading(false));
+    api.getEvents().then((events) => {
+      const map = new Map<number, string[]>();
+      for (const event of events) {
+        const list = map.get(event.location_id) ?? [];
+        list.push(event.name);
+        map.set(event.location_id, list);
+      }
+      setLocationEvents(map);
+    });
   }, []);
 
   const toggleSort = (key: "name" | "count") => {
@@ -83,12 +95,25 @@ export function LocationsListPage() {
               >
                 <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
                 <span className="w-48 text-sm font-medium truncate shrink-0">{loc.city}, {loc.state}</span>
-                <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
-                  <div
-                    className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
+                      <div
+                        className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  {locationEvents.has(loc.id) && (
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      <div className="flex flex-col gap-0.5">
+                        {locationEvents.get(loc.id)!.map((name, j) => (
+                          <span key={j}>{name}</span>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
                 <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{loc.event_count}</span>
               </button>
             );

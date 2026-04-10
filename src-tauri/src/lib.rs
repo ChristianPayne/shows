@@ -1,7 +1,7 @@
 mod commands;
 mod db;
 
-use commands::{backup, entities, events, export, import, maintenance, settings, stats};
+use commands::{backup, entities, events, export, genres, import, links, maintenance, settings, stats};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,12 +27,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             events::get_events,
             events::get_event,
+            events::get_artist_context,
             events::create_event,
             events::update_event,
             events::toggle_b2b,
             events::set_event_cancelled,
             events::delete_event,
             entities::get_artists,
+            entities::get_artist_stats,
             entities::get_venues,
             entities::get_locations,
             entities::get_events_for_artist,
@@ -52,6 +54,11 @@ pub fn run() {
             export::export_csv,
             backup::backup_database,
             backup::restore_database,
+            genres::fetch_genres,
+            genres::clear_artist_metadata,
+            links::get_artist_links,
+            genres::search_musicbrainz,
+            genres::apply_musicbrainz_match,
             maintenance::wipe_database,
             settings::get_setting,
             settings::set_setting,

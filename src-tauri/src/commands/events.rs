@@ -1,8 +1,9 @@
 use sqlx::SqlitePool;
 use tauri::State;
 
-use crate::db::models::EventDetail;
+use crate::db::models::{EventDetail, ArtistContextSet};
 use crate::db::queries;
+use crate::commands::genres;
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct ArtistEntry {
@@ -83,8 +84,20 @@ pub async fn get_event(pool: State<'_, SqlitePool>, event_id: i64) -> Result<Opt
 }
 
 #[tauri::command]
+pub async fn get_artist_context(
+    pool: State<'_, SqlitePool>,
+    event_id: i64,
+    event_date: String,
+) -> Result<Vec<ArtistContextSet>, String> {
+    queries::get_artist_context_for_event(&pool, event_id, &event_date)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn create_event(
     pool: State<'_, SqlitePool>,
+    app_handle: tauri::AppHandle,
     input: CreateEventInput,
 ) -> Result<i64, String> {
     let location_id = queries::find_or_create_location(&pool, &input.city, &input.state)
@@ -106,14 +119,24 @@ pub async fn create_event(
         }
     }
 
-    queries::create_event(&pool, &input.name, &input.date, input.end_date.as_deref(), venue_id, location_id, &artists)
+    let event_id = queries::create_event(&pool, &input.name, &input.date, input.end_date.as_deref(), venue_id, location_id, &artists)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Fetch metadata for any new artists in the background
+    let pool_clone = pool.inner().clone();
+    let app_clone = app_handle.clone();
+    tokio::spawn(async move {
+        let _ = genres::fetch_genres_bg(&pool_clone, &app_clone).await;
+    });
+
+    Ok(event_id)
 }
 
 #[tauri::command]
 pub async fn update_event(
     pool: State<'_, SqlitePool>,
+    app_handle: tauri::AppHandle,
     event_id: i64,
     input: CreateEventInput,
 ) -> Result<(), String> {
@@ -138,7 +161,16 @@ pub async fn update_event(
 
     queries::update_event(&pool, event_id, &input.name, &input.date, input.end_date.as_deref(), venue_id, location_id, &artists)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Fetch metadata for any new artists in the background
+    let pool_clone = pool.inner().clone();
+    let app_clone = app_handle.clone();
+    tokio::spawn(async move {
+        let _ = genres::fetch_genres_bg(&pool_clone, &app_clone).await;
+    });
+
+    Ok(())
 }
 
 #[tauri::command]

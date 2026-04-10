@@ -5,4 +5,6 @@ pub mod backup;
 pub mod entities;
 pub mod stats;
 pub mod maintenance;
+pub mod genres;
+pub mod links;
 pub mod settings;

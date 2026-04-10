@@ -8,6 +8,18 @@ export interface ArtistSet {
   artists: ArtistInfo[];
 }
 
+export interface ArtistContext {
+  id: number;
+  name: string;
+  set_group: number | null;
+  total_events: number;
+  first_event: boolean;
+}
+
+export interface ArtistContextSet {
+  artists: ArtistContext[];
+}
+
 export interface ArtistEntry {
   name: string;
   set_group: number | null;
@@ -27,10 +39,60 @@ export interface EventDetail {
   location_id: number;
 }
 
+export interface ArtistStats {
+  genre: string | null;
+  tags: string | null;
+  country: string | null;
+  artist_type: string | null;
+  begin_year: string | null;
+  end_year: string | null;
+  active: boolean | null;
+  disambiguation: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  unique_venues: number;
+  unique_locations: number;
+  related_artists: RelatedArtist[];
+}
+
+export interface RelatedArtist {
+  id: number;
+  name: string;
+  shared_events: number;
+}
+
+export interface ArtistLinks {
+  link_spotify: string | null;
+  link_instagram: string | null;
+  link_youtube: string | null;
+  link_soundcloud: string | null;
+  link_bandcamp: string | null;
+  link_website: string | null;
+}
+
+export interface MusicBrainzMatch {
+  mbid: string;
+  name: string;
+  score: number;
+  disambiguation: string;
+  artist_type: string;
+  country: string;
+  begin_year: string;
+}
+
 export interface EntityWithCount {
   id: number;
   name: string;
   event_count: number;
+}
+
+export interface ArtistWithCount {
+  id: number;
+  name: string;
+  event_count: number;
+  genre: string | null;
+  country: string | null;
+  artist_type: string | null;
 }
 
 export interface LocationWithCount {
