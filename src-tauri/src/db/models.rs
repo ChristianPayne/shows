@@ -55,6 +55,7 @@ pub struct ArtistContext {
     pub set_group: Option<i64>,
     pub total_events: i64,
     pub first_event: bool,
+    pub mbid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

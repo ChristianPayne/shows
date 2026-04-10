@@ -29,6 +29,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/009_add_mbid.sql"),
     // v10: add external links to artists
     include_str!("../../migrations/010_add_artist_links.sql"),
+    // v11: setlist cache table
+    include_str!("../../migrations/011_add_setlist_cache.sql"),
 ];
 
 /// Initialize the SQLite database, run pending migrations, and return the connection pool.

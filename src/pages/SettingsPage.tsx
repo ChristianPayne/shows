@@ -145,6 +145,31 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
 
       <Separator />
 
+      {/* API Keys */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">API Keys</h2>
+        <div className="space-y-2">
+          <label className="text-sm text-muted-foreground" htmlFor="setlistfm-key">
+            setlist.fm — enables setlist lookup on event pages
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="setlistfm-key"
+              type="password"
+              placeholder="Enter setlist.fm API key"
+              defaultValue=""
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              onBlur={(e) => {
+                const val = e.target.value.trim();
+                if (val) api.setSetting("setlistfm_api_key", val);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
       {/* Data */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Data</h2>

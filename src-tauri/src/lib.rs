@@ -1,7 +1,7 @@
 mod commands;
 mod db;
 
-use commands::{backup, entities, events, export, genres, import, links, maintenance, settings, stats};
+use commands::{backup, entities, events, export, genres, import, links, maintenance, setlists, settings, stats};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -55,6 +55,9 @@ pub fn run() {
             backup::backup_database,
             backup::restore_database,
             genres::fetch_genres,
+            setlists::has_setlistfm_key,
+            setlists::get_cached_setlist,
+            setlists::get_setlist,
             genres::clear_artist_metadata,
             links::get_artist_links,
             genres::search_musicbrainz,

@@ -10,6 +10,7 @@ import type {
   ArtistWithCount,
   ArtistContextSet,
   ArtistStats,
+  SetlistResult,
   ArtistLinks,
   MusicBrainzMatch,
 } from "./types";
@@ -117,6 +118,16 @@ export const getSetting = (key: string) =>
 
 export const setSetting = (key: string, value: string) =>
   invoke<void>("set_setting", { key, value });
+
+// ── Setlists ──
+
+export const hasSetlistfmKey = () => invoke<boolean>("has_setlistfm_key");
+
+export const getCachedSetlist = (artistMbid: string, date: string) =>
+  invoke<SetlistResult | null>("get_cached_setlist", { artistMbid, date });
+
+export const getSetlist = (artistMbid: string, date: string) =>
+  invoke<SetlistResult | null>("get_setlist", { artistMbid, date });
 
 // ── Genres ──
 

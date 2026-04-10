@@ -4,8 +4,10 @@ import { EntityLink } from "@/components/EntityLink";
 import { BackButton } from "@/components/BackButton";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import { Badge } from "@/components/ui/badge";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { ExternalLink, Music, ChevronDown, ChevronUp } from "lucide-react";
 import * as api from "@/api";
-import type { EventDetail as EventDetailType, ArtistContextSet } from "@/types";
+import type { EventDetail as EventDetailType, ArtistContextSet, SetlistResult } from "@/types";
 
 interface EventDetailProps {
   event: EventDetailType;
@@ -21,9 +23,26 @@ export function EventDetailView({
   onToggleCancelled,
 }: EventDetailProps) {
   const [artistSets, setArtistSets] = useState<ArtistContextSet[]>([]);
+  const [hasSetlistKey, setHasSetlistKey] = useState(false);
+  const [setlists, setSetlists] = useState<Map<number, SetlistResult | null>>(new Map());
 
   useEffect(() => {
-    api.getArtistContext(event.id, event.date).then(setArtistSets);
+    api.getArtistContext(event.id, event.date).then((sets) => {
+      setArtistSets(sets);
+      // Load cached setlists (no API calls)
+      for (const set of sets) {
+        for (const artist of set.artists) {
+          if (artist.mbid) {
+            api.getCachedSetlist(artist.mbid, event.date).then((result) => {
+              if (result !== null) {
+                setSetlists((prev) => new Map(prev).set(artist.id, result));
+              }
+            });
+          }
+        }
+      }
+    });
+    api.hasSetlistfmKey().then(setHasSetlistKey);
   }, [event.id, event.date]);
 
   const daysLabel = getDaysLabel(event.date, event.end_date);
@@ -92,7 +111,19 @@ export function EventDetailView({
           {artistSets.map((set, i) => {
             if (set.artists.length === 1) {
               const a = set.artists[0];
-              return <ArtistCard key={a.id} artist={a} />;
+              return (
+                <ArtistCard
+                  key={a.id}
+                  artist={a}
+                  setlist={setlists.get(a.id)}
+                  showSetlistButton={hasSetlistKey && !!a.mbid}
+                  onFetchSetlist={async () => {
+                    if (!a.mbid) return;
+                    const result = await api.getSetlist(a.mbid, event.date);
+                    setSetlists((prev) => new Map(prev).set(a.id, result));
+                  }}
+                />
+              );
             }
 
             // B2B set — shared card
@@ -132,22 +163,92 @@ export function EventDetailView({
   );
 }
 
-function ArtistCard({ artist }: { artist: { id: number; name: string; total_events: number; first_event: boolean } }) {
+function ArtistCard({
+  artist,
+  setlist,
+  showSetlistButton,
+  onFetchSetlist,
+}: {
+  artist: { id: number; name: string; total_events: number; first_event: boolean };
+  setlist?: SetlistResult | null;
+  showSetlistButton: boolean;
+  onFetchSetlist: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const hasSetlist = setlist && setlist.songs.length > 0;
+  const checkedNoSetlist = setlist !== undefined && !hasSetlist;
+  const canExpand = hasSetlist || (showSetlistButton && setlist === undefined);
+
+  const handleRowClick = async () => {
+    if (hasSetlist) {
+      setExpanded(!expanded);
+    } else if (showSetlistButton && setlist === undefined) {
+      setLoading(true);
+      await onFetchSetlist();
+      setLoading(false);
+      setExpanded(true);
+    }
+  };
+
   return (
-    <Link
-      to={`/artists/${artist.id}`}
-      className="flex items-center justify-between rounded-lg border p-3 hover:border-primary/30 transition-colors"
-    >
-      <span className="font-medium text-sm">{artist.name}</span>
-      <div className="flex items-center gap-1.5">
-        {artist.first_event && (
-          <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-primary/20">New</Badge>
-        )}
-        <span className="text-xs text-muted-foreground">
-          {artist.total_events}x
-        </span>
+    <div className="rounded-lg border hover:border-primary/30 transition-colors">
+      <div
+        className={`flex items-center gap-3 px-4 py-3 ${canExpand ? "cursor-pointer" : ""}`}
+        onClick={canExpand ? handleRowClick : undefined}
+      >
+        <div className="flex-1 min-w-0">
+          <Link
+            to={`/artists/${artist.id}`}
+            className="font-medium text-sm hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {artist.name}
+          </Link>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-muted-foreground">
+              Seen {artist.total_events} {artist.total_events === 1 ? "time" : "times"}
+            </span>
+            {artist.first_event && (
+              <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-primary/20">First time</Badge>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {loading && (
+            <span className="text-xs text-muted-foreground">loading...</span>
+          )}
+          {hasSetlist && (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              {setlist!.songs.length} songs
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </span>
+          )}
+          {!hasSetlist && !loading && !checkedNoSetlist && showSetlistButton && (
+            <span className="text-xs text-muted-foreground">Setlist</span>
+          )}
+        </div>
       </div>
-    </Link>
+      {hasSetlist && expanded && (
+        <div className="border-t px-3 py-2 space-y-0.5">
+          {setlist!.songs.map((song, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground w-4 text-right shrink-0">{i + 1}</span>
+              <span className={song.tape ? "text-muted-foreground italic" : ""}>{song.name}</span>
+              {song.info && <span className="text-muted-foreground">({song.info})</span>}
+            </div>
+          ))}
+          {setlist!.url && (
+            <button
+              onClick={(e) => { e.stopPropagation(); openUrl(setlist!.url); }}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-1 pt-1 border-t"
+            >
+              <ExternalLink className="h-3 w-3" /> View on setlist.fm
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

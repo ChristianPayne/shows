@@ -409,12 +409,21 @@ pub async fn get_artist_context_for_event(
         .fetch_one(pool)
         .await?;
 
+        let mbid: Option<String> = sqlx::query_scalar(
+            "SELECT mbid FROM artists WHERE id = ?1"
+        )
+        .bind(artist.id)
+        .fetch_one(pool)
+        .await?;
+        let mbid = mbid.filter(|m| !m.is_empty() && m != "skip");
+
         contexts.push(ArtistContext {
             id: artist.id,
             name: artist.name.clone(),
             set_group: artist.set_group,
             total_events: total,
             first_event: earliest == event_date,
+            mbid,
         });
     }
 

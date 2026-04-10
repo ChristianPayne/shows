@@ -14,6 +14,7 @@ export interface ArtistContext {
   set_group: number | null;
   total_events: number;
   first_event: boolean;
+  mbid: string | null;
 }
 
 export interface ArtistContextSet {
@@ -135,6 +136,20 @@ export interface ImportResult {
   artists_created: number;
   venues_created: number;
   locations_created: number;
+}
+
+export interface SetlistSong {
+  name: string;
+  info: string | null;
+  tape: boolean;
+}
+
+export interface SetlistResult {
+  event_date: string;
+  venue_name: string;
+  city: string;
+  songs: SetlistSong[];
+  url: string;
 }
 
 export interface CreateEventInput {
