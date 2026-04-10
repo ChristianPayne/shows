@@ -41,6 +41,12 @@ pub struct ArtistInfo {
     pub set_group: Option<i64>,
 }
 
+/// A group of artists that perform together (b2b). Solo artists are a set of one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistSet {
+    pub artists: Vec<ArtistInfo>,
+}
+
 /// Event with all related data joined — used for list and detail views.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventDetail {
@@ -52,9 +58,33 @@ pub struct EventDetail {
     pub venue: String,
     pub city: String,
     pub state: String,
-    pub artists: Vec<ArtistInfo>,
+    pub artist_sets: Vec<ArtistSet>,
     pub venue_id: i64,
     pub location_id: i64,
+}
+
+impl EventDetail {
+    /// Build from raw artist rows, grouping by set_group.
+    pub fn group_artists(artists: Vec<ArtistInfo>) -> Vec<ArtistSet> {
+        let mut sets: Vec<ArtistSet> = Vec::new();
+        let mut group_map: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+
+        for artist in artists {
+            if let Some(group) = artist.set_group {
+                if let Some(&idx) = group_map.get(&group) {
+                    sets[idx].artists.push(artist);
+                } else {
+                    let idx = sets.len();
+                    group_map.insert(group, idx);
+                    sets.push(ArtistSet { artists: vec![artist] });
+                }
+            } else {
+                sets.push(ArtistSet { artists: vec![artist] });
+            }
+        }
+
+        sets
+    }
 }
 
 /// Row returned from the events join query before artist aggregation.

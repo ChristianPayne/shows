@@ -61,6 +61,7 @@ export function LocationsListPage() {
         />
       </div>
       <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
+        <span className="w-6 shrink-0">#</span>
         <button className="w-48 shrink-0 flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("name")}>
           Location <ArrowUpDown className="h-3 w-3" />
         </button>
@@ -72,7 +73,7 @@ export function LocationsListPage() {
       <div className="space-y-1">
         {(() => {
           const maxCount = Math.max(1, ...filtered.map((l) => l.event_count));
-          return filtered.map((loc) => {
+          return filtered.map((loc, index) => {
             const pct = (loc.event_count / maxCount) * 100;
             return (
               <button
@@ -80,6 +81,7 @@ export function LocationsListPage() {
                 className="group flex items-center gap-3 w-full rounded-md px-2 py-1.5 hover:bg-accent/30 transition-colors text-left"
                 onClick={() => navigate(`/locations/${loc.id}`)}
               >
+                <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
                 <span className="w-48 text-sm font-medium truncate shrink-0">{loc.city}, {loc.state}</span>
                 <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
                   <div

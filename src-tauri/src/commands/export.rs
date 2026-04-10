@@ -16,7 +16,7 @@ pub async fn export_csv(pool: State<'_, SqlitePool>, destination: String) -> Res
         .map_err(|e| e.to_string())?;
 
     for event in &events {
-        let artists_str = format_artists_for_export(&event.artists);
+        let artists_str = format_artists_for_export(&event.artist_sets);
         let date = format_date_for_export(&event.date);
         let end_date = event.end_date.as_ref()
             .map(|d| format_date_for_export(d))
@@ -32,44 +32,16 @@ pub async fn export_csv(pool: State<'_, SqlitePool>, destination: String) -> Res
     Ok(())
 }
 
-fn format_artists_for_export(artists: &[crate::db::models::ArtistInfo]) -> String {
-    // Group by set_group
-    let mut groups: Vec<String> = Vec::new();
-    let mut current_group: Option<i64> = None;
-    let mut current_names: Vec<String> = Vec::new();
-
-    for artist in artists {
-        match (artist.set_group, current_group) {
-            (Some(g), Some(cg)) if g == cg => {
-                // Same group — accumulate
-                current_names.push(artist.name.clone());
-            }
-            (Some(g), _) => {
-                // New group — flush previous
-                if !current_names.is_empty() {
-                    groups.push(current_names.join(" b2b "));
-                }
-                current_group = Some(g);
-                current_names = vec![artist.name.clone()];
-            }
-            (None, _) => {
-                // No group — flush previous, add solo
-                if !current_names.is_empty() {
-                    groups.push(current_names.join(" b2b "));
-                    current_names.clear();
-                    current_group = None;
-                }
-                groups.push(artist.name.clone());
-            }
-        }
-    }
-
-    // Flush remaining group
-    if !current_names.is_empty() {
-        groups.push(current_names.join(" b2b "));
-    }
-
-    groups.join(", ")
+fn format_artists_for_export(sets: &[crate::db::models::ArtistSet]) -> String {
+    sets.iter()
+        .map(|set| {
+            set.artists.iter()
+                .map(|a| a.name.as_str())
+                .collect::<Vec<_>>()
+                .join(" b2b ")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn format_date_for_export(date: &str) -> String {

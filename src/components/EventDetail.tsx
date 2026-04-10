@@ -67,7 +67,7 @@ export function EventDetailView({
 
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-2">Artists</h3>
-        <ArtistBadgeList artists={event.artists} />
+        <ArtistBadgeList sets={event.artist_sets} />
       </div>
     </div>
   );

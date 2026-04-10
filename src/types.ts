@@ -4,6 +4,10 @@ export interface ArtistInfo {
   set_group: number | null;
 }
 
+export interface ArtistSet {
+  artists: ArtistInfo[];
+}
+
 export interface ArtistEntry {
   name: string;
   set_group: number | null;
@@ -18,7 +22,7 @@ export interface EventDetail {
   venue: string;
   city: string;
   state: string;
-  artists: ArtistInfo[];
+  artist_sets: ArtistSet[];
   venue_id: number;
   location_id: number;
 }

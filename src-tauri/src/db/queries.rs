@@ -319,7 +319,7 @@ pub async fn get_all_events(pool: &SqlitePool) -> Result<Vec<EventDetail>, sqlx:
             venue: row.venue,
             city: row.city,
             state: row.state,
-            artists: artist_names,
+            artist_sets: EventDetail::group_artists(artist_names),
             venue_id: row.venue_id,
             location_id: row.location_id,
         });
@@ -366,7 +366,7 @@ pub async fn get_event_by_id(
                 venue: row.venue,
                 city: row.city,
                 state: row.state,
-                artists: artist_names,
+                artist_sets: EventDetail::group_artists(artist_names),
                 venue_id: row.venue_id,
                 location_id: row.location_id,
             }))
@@ -463,7 +463,7 @@ pub async fn get_events_for_artist(
             venue: row.venue,
             city: row.city,
             state: row.state,
-            artists: artist_names,
+            artist_sets: EventDetail::group_artists(artist_names),
             venue_id: row.venue_id,
             location_id: row.location_id,
         });
@@ -510,7 +510,7 @@ pub async fn get_events_for_venue(
             venue: row.venue,
             city: row.city,
             state: row.state,
-            artists: artist_names,
+            artist_sets: EventDetail::group_artists(artist_names),
             venue_id: row.venue_id,
             location_id: row.location_id,
         });
@@ -557,7 +557,7 @@ pub async fn get_events_for_location(
             venue: row.venue,
             city: row.city,
             state: row.state,
-            artists: artist_names,
+            artist_sets: EventDetail::group_artists(artist_names),
             venue_id: row.venue_id,
             location_id: row.location_id,
         });

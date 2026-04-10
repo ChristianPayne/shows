@@ -29,6 +29,7 @@ pub fn run() {
             events::get_event,
             events::create_event,
             events::update_event,
+            events::toggle_b2b,
             events::set_event_cancelled,
             events::delete_event,
             entities::get_artists,

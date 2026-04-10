@@ -43,7 +43,7 @@ export function EventsTable({ events, search = "" }: EventsTableProps) {
         e.venue.toLowerCase().includes(q) ||
         e.city.toLowerCase().includes(q) ||
         e.state.toLowerCase().includes(q) ||
-        e.artists.some((a) => a.name.toLowerCase().includes(q))
+        e.artist_sets.some((s) => s.artists.some((a) => a.name.toLowerCase().includes(q)))
     );
   }, [events, search]);
 
@@ -92,6 +92,7 @@ export function EventsTable({ events, search = "" }: EventsTableProps) {
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead className="w-10 text-muted-foreground">#</TableHead>
           <SortHeader label="Date" sortKeyName="date" />
           <SortHeader label="Event" sortKeyName="name" />
           <TableHead>Artists</TableHead>
@@ -102,17 +103,18 @@ export function EventsTable({ events, search = "" }: EventsTableProps) {
       <TableBody>
         {sorted.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={5} className="text-center text-muted-foreground">
+            <TableCell colSpan={6} className="text-center text-muted-foreground">
               No events found
             </TableCell>
           </TableRow>
         ) : (
-          sorted.map((event) => (
+          sorted.map((event, index) => (
             <TableRow
               key={event.id}
               className={`cursor-pointer ${event.cancelled ? "opacity-50" : ""}`}
               onClick={() => navigate(`/events/${event.id}`)}
             >
+              <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
               <TableCell className="whitespace-nowrap">
                 {formatDate(event.date)}
                 {event.end_date && ` — ${formatDate(event.end_date)}`}
@@ -126,7 +128,7 @@ export function EventsTable({ events, search = "" }: EventsTableProps) {
                 )}
               </TableCell>
               <TableCell>
-                <ArtistBadgeList artists={event.artists} />
+                <ArtistBadgeList sets={event.artist_sets} />
               </TableCell>
               <TableCell>
                 <EntityLink to={`/venues/${event.venue_id}`}>

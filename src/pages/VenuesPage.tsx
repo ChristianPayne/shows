@@ -59,6 +59,7 @@ export function VenuesListPage() {
         />
       </div>
       <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
+        <span className="w-6 shrink-0">#</span>
         <button className="w-48 shrink-0 flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("name")}>
           Name <ArrowUpDown className="h-3 w-3" />
         </button>
@@ -70,7 +71,7 @@ export function VenuesListPage() {
       <div className="space-y-1">
         {(() => {
           const maxCount = Math.max(1, ...filtered.map((v) => v.event_count));
-          return filtered.map((venue) => {
+          return filtered.map((venue, index) => {
             const pct = (venue.event_count / maxCount) * 100;
             return (
               <button
@@ -78,6 +79,7 @@ export function VenuesListPage() {
                 className="group flex items-center gap-3 w-full rounded-md px-2 py-1.5 hover:bg-accent/30 transition-colors text-left"
                 onClick={() => navigate(`/venues/${venue.id}`)}
               >
+                <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
                 <span className="w-48 text-sm font-medium truncate shrink-0">{venue.name}</span>
                 <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
                   <div

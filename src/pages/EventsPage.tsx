@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { EventsTable } from "@/components/EventsTable";
 import { EventDetailView } from "@/components/EventDetail";
@@ -41,12 +41,6 @@ export function EventsListPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-        <Link
-          to="/events/new"
-          className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90"
-        >
-          Add Event
-        </Link>
       </div>
       <EventsTable events={events} search={search} />
     </div>

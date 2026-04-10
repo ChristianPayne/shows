@@ -6,6 +6,7 @@ import type {
   Stats,
   ImportResult,
   CreateEventInput,
+  ArtistEntry,
 } from "./types";
 
 // ── Events ──
@@ -20,6 +21,9 @@ export const createEvent = (input: CreateEventInput) =>
 
 export const updateEvent = (eventId: number, input: CreateEventInput) =>
   invoke<void>("update_event", { eventId, input });
+
+export const toggleB2b = (artists: ArtistEntry[], index: number) =>
+  invoke<ArtistEntry[]>("toggle_b2b", { artists, index });
 
 export const setEventCancelled = (eventId: number, cancelled: boolean) =>
   invoke<void>("set_event_cancelled", { eventId, cancelled });

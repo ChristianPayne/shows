@@ -19,16 +19,19 @@ import {
   Sun,
   Moon,
   LayoutDashboard,
+  Plus,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
-  { to: "/events", label: "Events", icon: <Calendar className="h-4 w-4" /> },
-  { to: "/artists", label: "Artists", icon: <Mic2 className="h-4 w-4" /> },
-  { to: "/venues", label: "Venues", icon: <Building2 className="h-4 w-4" /> },
-  { to: "/locations", label: "Locations", icon: <MapPin className="h-4 w-4" /> },
-  { to: "/settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
+  { to: "/events", label: "Events", icon: <Calendar className="h-4 w-4" />, children: [
+    { to: "/artists", label: "Artists", icon: <Mic2 className="h-3.5 w-3.5" /> },
+    { to: "/venues", label: "Venues", icon: <Building2 className="h-3.5 w-3.5" /> },
+    { to: "/locations", label: "Locations", icon: <MapPin className="h-3.5 w-3.5" /> },
+  ]},
 ];
+
+const SETTINGS_NAV = { to: "/settings", label: "Settings", icon: <Settings className="h-4 w-4" /> };
 
 function AppLayout() {
   const mainRef = useRef<HTMLElement>(null);
@@ -65,7 +68,7 @@ function AppLayout() {
 
   return (
     <div className="flex h-screen">
-      <nav className="w-48 border-r bg-sidebar-background p-4 flex flex-col gap-1">
+      <nav className="w-48 border-r bg-sidebar-background p-4 flex flex-col">
         <div className="flex items-center justify-between px-2 mb-4">
           <h1 className="text-lg font-bold">Shows</h1>
           <button
@@ -75,11 +78,58 @@ function AppLayout() {
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
         </div>
-        {NAV_ITEMS.map(({ to, label, icon }) => (
+        <div className="flex flex-col gap-1">
+          {NAV_ITEMS.map(({ to, label, icon, children }) => (
+            <div key={to}>
+              <NavLink
+                to={to}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                  )
+                }
+              >
+                {icon}
+                {label}
+              </NavLink>
+              {children && (
+                <div className="flex flex-col gap-0.5 ml-4 mt-0.5">
+                  {children.map((child) => (
+                    <NavLink
+                      key={child.to}
+                      to={child.to}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                          isActive
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                        )
+                      }
+                    >
+                      {child.icon}
+                      {child.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="mt-auto flex flex-col gap-1">
           <NavLink
-            key={to}
-            to={to}
-            end={to === "/"}
+            to="/events/new"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Event
+          </NavLink>
+          <NavLink
+            to={SETTINGS_NAV.to}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
@@ -89,10 +139,10 @@ function AppLayout() {
               )
             }
           >
-            {icon}
-            {label}
+            {SETTINGS_NAV.icon}
+            {SETTINGS_NAV.label}
           </NavLink>
-        ))}
+        </div>
       </nav>
 
       <main ref={mainRef} className="flex-1 overflow-auto p-6">

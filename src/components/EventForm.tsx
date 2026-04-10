@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Autocomplete } from "@/components/Autocomplete";
-import { X, Plus, Link2 } from "lucide-react";
+import { X, Plus, Link2, ChevronLeft, ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
 import * as api from "@/api";
 import type { EventDetail, CreateEventInput } from "@/types";
@@ -28,7 +28,9 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
   const [city, setCity] = useState(initialData?.city ?? "");
   const [state, setState] = useState(initialData?.state ?? "");
   const [artists, setArtists] = useState<FormArtist[]>(
-    initialData?.artists.map((a) => ({ name: a.name, setGroup: a.set_group })) ?? []
+    initialData?.artist_sets.flatMap((s) =>
+      s.artists.map((a) => ({ name: a.name, setGroup: a.set_group }))
+    ) ?? []
   );
   const [artistInput, setArtistInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -66,36 +68,19 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
     setArtists(artists.filter((_, i) => i !== index));
   };
 
-  // Link this artist with the previous one as a b2b set
-  const toggleB2b = (index: number) => {
-    if (index === 0) return;
-    setArtists((prev) => {
-      const updated = [...prev];
-      const prevArtist = updated[index - 1];
-      const currArtist = updated[index];
+  const moveArtist = (from: number, to: number) => {
+    if (to < 0 || to >= artists.length) return;
+    const updated = [...artists];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    setArtists(updated);
+  };
 
-      if (currArtist.setGroup != null && currArtist.setGroup === prevArtist.setGroup) {
-        // Unlink: remove from group
-        updated[index] = { ...currArtist, setGroup: null };
-        // If prev artist is now alone in the group, ungroup it too
-        const remaining = updated.filter((a) => a.setGroup === prevArtist.setGroup);
-        if (remaining.length <= 1) {
-          for (let i = 0; i < updated.length; i++) {
-            if (updated[i].setGroup === prevArtist.setGroup) {
-              updated[i] = { ...updated[i], setGroup: null };
-            }
-          }
-        }
-      } else {
-        // Link: assign same group
-        const existingGroup = prevArtist.setGroup;
-        const newGroup = existingGroup ?? (Math.max(0, ...updated.map((a) => a.setGroup ?? 0)) + 1);
-        updated[index - 1] = { ...prevArtist, setGroup: newGroup };
-        updated[index] = { ...currArtist, setGroup: newGroup };
-      }
-
-      return updated;
-    });
+  // Delegate b2b toggle logic to Rust
+  const toggleB2b = async (index: number) => {
+    const entries = artists.map((a) => ({ name: a.name, set_group: a.setGroup }));
+    const result = await api.toggleB2b(entries, index);
+    setArtists(result.map((a) => ({ name: a.name, setGroup: a.set_group })));
   };
 
   const handleArtistKeyDown = (e: React.KeyboardEvent) => {
@@ -248,12 +233,30 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
                     {prevSameGroup && (
                       <span className="text-xs text-muted-foreground">b2b</span>
                     )}
-                    <Badge variant={isB2b ? "default" : "secondary"} className="gap-1">
+                    <Badge variant={isB2b ? "default" : "secondary"} className="gap-0.5 pl-0.5">
+                      {i > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => moveArtist(i, i - 1)}
+                          className="hover:text-foreground text-muted-foreground"
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                        </button>
+                      )}
                       {artist.name}
+                      {i < artists.length - 1 && (
+                        <button
+                          type="button"
+                          onClick={() => moveArtist(i, i + 1)}
+                          className="hover:text-foreground text-muted-foreground"
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => removeArtist(i)}
-                        className="hover:text-muted-foreground"
+                        className="hover:text-muted-foreground ml-0.5"
                       >
                         <X className="h-3 w-3" />
                       </button>

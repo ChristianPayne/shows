@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import type { ArtistInfo } from "@/types";
+import type { ArtistSet } from "@/types";
 
 interface EntityLinkProps {
   to: string;
@@ -39,29 +39,27 @@ export function ArtistBadge({ name, artistId }: { name: string; artistId?: numbe
 }
 
 /**
- * Renders a list of artists, grouping b2b sets into single badges
- * where each artist name is independently clickable.
+ * Renders pre-grouped artist sets. Each set is a badge —
+ * solo artists are a set of one, b2b artists share a badge.
  */
-export function ArtistBadgeList({ artists }: { artists: ArtistInfo[] }) {
-  const groups = groupArtists(artists);
-
+export function ArtistBadgeList({ sets }: { sets: ArtistSet[] }) {
   return (
     <div className="flex flex-wrap gap-1">
-      {groups.map((group, i) => {
-        if (group.length === 1) {
+      {sets.map((set, i) => {
+        if (set.artists.length === 1) {
+          const artist = set.artists[0];
           return (
             <ArtistBadge
-              key={group[0].id}
-              name={group[0].name}
-              artistId={group[0].id}
+              key={artist.id}
+              name={artist.name}
+              artistId={artist.id}
             />
           );
         }
 
-        // B2B group — render as a single badge with multiple clickable names
         return (
           <Badge key={`b2b-${i}`} variant="outline" className="gap-0 hover:bg-accent hover:text-primary hover:border-primary/30 transition-colors">
-            {group.map((artist, j) => (
+            {set.artists.map((artist, j) => (
               <span key={artist.id} className="inline-flex items-center">
                 {j > 0 && (
                   <span className="mx-1 text-muted-foreground">b2b</span>
@@ -80,27 +78,4 @@ export function ArtistBadgeList({ artists }: { artists: ArtistInfo[] }) {
       })}
     </div>
   );
-}
-
-/** Group artists by set_group. Solo artists (null group) are each their own group. */
-function groupArtists(artists: ArtistInfo[]): ArtistInfo[][] {
-  const groups: ArtistInfo[][] = [];
-  const groupMap = new Map<number, ArtistInfo[]>();
-
-  for (const artist of artists) {
-    if (artist.set_group != null) {
-      const existing = groupMap.get(artist.set_group);
-      if (existing) {
-        existing.push(artist);
-      } else {
-        const group = [artist];
-        groupMap.set(artist.set_group, group);
-        groups.push(group);
-      }
-    } else {
-      groups.push([artist]);
-    }
-  }
-
-  return groups;
 }
