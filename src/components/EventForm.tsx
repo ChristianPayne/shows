@@ -4,8 +4,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Autocomplete } from "@/components/Autocomplete";
-import { X, Plus, Link2, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Plus, Link2 } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import * as api from "@/api";
 import type { EventDetail, CreateEventInput } from "@/types";
 
@@ -68,11 +84,20 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
     setArtists(artists.filter((_, i) => i !== index));
   };
 
-  const moveArtist = (from: number, to: number) => {
-    if (to < 0 || to >= artists.length) return;
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = artists.findIndex((_, i) => `artist-${i}` === active.id);
+    const newIndex = artists.findIndex((_, i) => `artist-${i}` === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
     const updated = [...artists];
-    const [moved] = updated.splice(from, 1);
-    updated.splice(to, 0, moved);
+    const [moved] = updated.splice(oldIndex, 1);
+    updated.splice(newIndex, 0, moved);
     setArtists(updated);
   };
 
@@ -211,60 +236,42 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
             </Button>
           </div>
           {artists.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 pt-2">
-              {artists.map((artist, i) => {
-                const isB2b = artist.setGroup != null;
-                const prevSameGroup = i > 0 && artists[i - 1].setGroup != null && artists[i - 1].setGroup === artist.setGroup;
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={artists.map((_, i) => `artist-${i}`)} strategy={horizontalListSortingStrategy}>
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  {artists.map((artist, i) => {
+                    const isB2b = artist.setGroup != null;
+                    const prevSameGroup = i > 0 && artists[i - 1].setGroup != null && artists[i - 1].setGroup === artist.setGroup;
 
-                return (
-                  <div key={`${artist.name}-${i}`} className="flex items-center gap-1">
-                    {i > 0 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className={`h-6 w-6 ${prevSameGroup ? "text-primary" : "text-muted-foreground"}`}
-                        onClick={() => toggleB2b(i)}
-                        title={prevSameGroup ? "Unlink b2b" : "Link as b2b"}
-                      >
-                        <Link2 className="h-3 w-3" />
-                      </Button>
-                    )}
-                    {prevSameGroup && (
-                      <span className="text-xs text-muted-foreground">b2b</span>
-                    )}
-                    <Badge variant={isB2b ? "default" : "secondary"} className="gap-0.5 pl-0.5">
-                      {i > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => moveArtist(i, i - 1)}
-                          className="hover:text-foreground text-muted-foreground"
-                        >
-                          <ChevronLeft className="h-3 w-3" />
-                        </button>
-                      )}
-                      {artist.name}
-                      {i < artists.length - 1 && (
-                        <button
-                          type="button"
-                          onClick={() => moveArtist(i, i + 1)}
-                          className="hover:text-foreground text-muted-foreground"
-                        >
-                          <ChevronRight className="h-3 w-3" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeArtist(i)}
-                        className="hover:text-muted-foreground ml-0.5"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
+                    return (
+                      <div key={`${artist.name}-${i}`} className="flex items-center gap-1">
+                        {i > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className={`h-6 w-6 ${prevSameGroup ? "text-primary" : "text-muted-foreground"}`}
+                            onClick={() => toggleB2b(i)}
+                            title={prevSameGroup ? "Unlink b2b" : "Link as b2b"}
+                          >
+                            <Link2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {prevSameGroup && (
+                          <span className="text-xs text-muted-foreground">b2b</span>
+                        )}
+                        <SortableArtistBadge
+                          id={`artist-${i}`}
+                          name={artist.name}
+                          isB2b={isB2b}
+                          onRemove={() => removeArtist(i)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
 
@@ -278,6 +285,48 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
           </Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function SortableArtistBadge({
+  id,
+  name,
+  isB2b,
+  onRemove,
+}: {
+  id: string;
+  name: string;
+  isB2b: boolean;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="touch-none cursor-grab active:cursor-grabbing"
+      {...attributes}
+      {...listeners}
+    >
+      <Badge variant={isB2b ? "default" : "secondary"} className="gap-1">
+        {name}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="hover:text-muted-foreground"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </Badge>
     </div>
   );
 }
