@@ -1,5 +1,5 @@
 use sqlx::SqlitePool;
-use tauri::State;
+use tauri::{Emitter, State};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -85,6 +85,7 @@ pub async fn get_cached_setlist(
 #[tauri::command]
 pub async fn get_setlist(
     pool: State<'_, SqlitePool>,
+    app_handle: tauri::AppHandle,
     artist_mbid: String,
     date: String,
 ) -> Result<Option<SetlistResult>, String> {
@@ -116,6 +117,12 @@ pub async fn get_setlist(
         }));
     }
 
+    // Emit searching status
+    let _ = app_handle.emit("setlist-status", serde_json::json!({
+        "status": "searching",
+        "artist_mbid": &artist_mbid,
+    }));
+
     // Rate limit before making the request
     rate_limit();
 
@@ -140,8 +147,10 @@ pub async fn get_setlist(
         .map_err(|e| e.to_string())?;
 
     if !resp.status().is_success() {
-        // Cache empty result so we don't retry
         cache_setlist(pool.inner(), &artist_mbid, &date, &[], "", "", "").await;
+        let _ = app_handle.emit("setlist-status", serde_json::json!({
+            "status": "not_found",
+        }));
         return Ok(None);
     }
 
@@ -151,6 +160,9 @@ pub async fn get_setlist(
         Some(s) => s,
         None => {
             cache_setlist(pool.inner(), &artist_mbid, &date, &[], "", "", "").await;
+            let _ = app_handle.emit("setlist-status", serde_json::json!({
+                "status": "not_found",
+            }));
             return Ok(None);
         }
     };
@@ -176,6 +188,11 @@ pub async fn get_setlist(
 
     // Cache the result
     cache_setlist(pool.inner(), &artist_mbid, &date, &songs, &venue_name, &city, &setlist_url).await;
+
+    let _ = app_handle.emit("setlist-status", serde_json::json!({
+        "status": "found",
+        "song_count": songs.len(),
+    }));
 
     Ok(Some(SetlistResult {
         event_date: date,

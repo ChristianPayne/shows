@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Loader2, CheckCircle } from "lucide-react";
+import { Loader2, CheckCircle, XCircle } from "lucide-react";
 
 interface GenreProgress {
   current: number;
@@ -10,49 +10,87 @@ interface GenreProgress {
   done: boolean;
 }
 
-type Status = "idle" | "fetching" | "done";
+interface SetlistStatus {
+  status: "searching" | "found" | "not_found";
+  song_count?: number;
+}
+
+type MessageType = "idle" | "genre" | "genre-done" | "setlist-searching" | "setlist-found" | "setlist-not-found";
 
 export function StatusBar() {
-  const [status, setStatus] = useState<Status>("idle");
-  const [progress, setProgress] = useState<GenreProgress | null>(null);
+  const [messageType, setMessageType] = useState<MessageType>("idle");
+  const [genreProgress, setGenreProgress] = useState<GenreProgress | null>(null);
+  const [setlistSongCount, setSetlistSongCount] = useState(0);
 
   useEffect(() => {
-    const unlisten = listen<GenreProgress>("genre-progress", (event) => {
-      setProgress(event.payload);
-      setStatus(event.payload.done ? "done" : "fetching");
-
+    const unlistenGenre = listen<GenreProgress>("genre-progress", (event) => {
+      setGenreProgress(event.payload);
+      setMessageType(event.payload.done ? "genre-done" : "genre");
       if (event.payload.done) {
-        setTimeout(() => setStatus("idle"), 5000);
+        setTimeout(() => setMessageType("idle"), 5000);
+      }
+    });
+
+    const unlistenSetlist = listen<SetlistStatus>("setlist-status", (event) => {
+      const { status, song_count } = event.payload;
+      if (status === "searching") {
+        setMessageType("setlist-searching");
+      } else if (status === "found") {
+        setSetlistSongCount(song_count ?? 0);
+        setMessageType("setlist-found");
+        setTimeout(() => setMessageType("idle"), 3000);
+      } else {
+        setMessageType("setlist-not-found");
+        setTimeout(() => setMessageType("idle"), 3000);
       }
     });
 
     return () => {
-      unlisten.then((fn) => fn());
+      unlistenGenre.then((fn) => fn());
+      unlistenSetlist.then((fn) => fn());
     };
   }, []);
 
   return (
     <div className="border-t bg-sidebar-background px-4 py-1.5 flex items-center gap-3 text-xs text-muted-foreground shrink-0 h-8">
-      {status === "fetching" && progress && (
+      {messageType === "genre" && genreProgress && (
         <>
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           <span className="truncate">
-            Fetching genres… {progress.artist_name}
-            {progress.genre && ` → ${progress.genre}`}
+            Fetching genres… {genreProgress.artist_name}
+            {genreProgress.genre && ` → ${genreProgress.genre}`}
           </span>
           <span className="ml-auto shrink-0">
-            {progress.current}/{progress.total}
+            {genreProgress.current}/{genreProgress.total}
           </span>
         </>
       )}
-      {status === "done" && progress && (
+      {messageType === "genre-done" && genreProgress && (
         <>
           <CheckCircle className="h-3.5 w-3.5 text-green-500" />
           <span>
-            {progress.total === 0
+            {genreProgress.total === 0
               ? "All artist genres are up to date"
-              : `Genre fetch complete — ${progress.current} artists processed`}
+              : `Genre fetch complete — ${genreProgress.current} artists processed`}
           </span>
+        </>
+      )}
+      {messageType === "setlist-searching" && (
+        <>
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Searching for setlist…</span>
+        </>
+      )}
+      {messageType === "setlist-found" && (
+        <>
+          <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+          <span>Setlist found — {setlistSongCount} songs</span>
+        </>
+      )}
+      {messageType === "setlist-not-found" && (
+        <>
+          <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>No setlist found</span>
         </>
       )}
     </div>

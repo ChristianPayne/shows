@@ -5,7 +5,7 @@ import { BackButton } from "@/components/BackButton";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import { Badge } from "@/components/ui/badge";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Music, ChevronDown, ChevronUp } from "lucide-react";
+import { ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import * as api from "@/api";
 import type { EventDetail as EventDetailType, ArtistContextSet, SetlistResult } from "@/types";
 

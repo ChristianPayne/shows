@@ -735,7 +735,7 @@ pub async fn get_events_for_location(
 
 pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
     let (total_events,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM events WHERE cancelled = 0")
+        sqlx::query_as("SELECT COUNT(*) FROM events WHERE cancelled = 0 AND date <= date('now')")
             .fetch_one(pool)
             .await?;
 
@@ -759,7 +759,7 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
          FROM artists a
          JOIN event_artists ea ON a.id = ea.artist_id
          JOIN events e ON ea.event_id = e.id
-         WHERE e.cancelled = 0
+         WHERE e.cancelled = 0 AND e.date <= date('now')
          GROUP BY a.id
          ORDER BY count DESC
          LIMIT 10",
@@ -771,7 +771,7 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
         "SELECT v.id, v.name, COUNT(e.id) as count
          FROM venues v
          JOIN events e ON v.id = e.venue_id
-         WHERE e.cancelled = 0
+         WHERE e.cancelled = 0 AND e.date <= date('now')
          GROUP BY v.id
          ORDER BY count DESC
          LIMIT 10",
@@ -782,7 +782,7 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
     let events_per_year: Vec<YearCount> = sqlx::query_as(
         "SELECT substr(date, 1, 4) as year, COUNT(*) as count
          FROM events
-         WHERE cancelled = 0
+         WHERE cancelled = 0 AND date <= date('now')
          GROUP BY year
          ORDER BY year DESC",
     )
@@ -792,7 +792,7 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
     let events_per_month: Vec<MonthCount> = sqlx::query_as(
         "SELECT substr(date, 6, 2) as month, COUNT(*) as count
          FROM events
-         WHERE cancelled = 0
+         WHERE cancelled = 0 AND date <= date('now')
          GROUP BY month
          ORDER BY month",
     )
