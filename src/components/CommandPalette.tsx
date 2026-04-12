@@ -4,7 +4,7 @@ import { Command } from "cmdk";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Calendar, Mic2, Building2, MapPin } from "lucide-react";
 import * as api from "@/api";
-import type { EventDetail, ArtistWithCount, EntityWithCount, LocationWithCount } from "@/types";
+import type { EventDetail, ArtistWithCount, VenueWithCount, LocationWithCount } from "@/types";
 
 export function CommandPalette() {
   const navigate = useNavigate();
@@ -12,7 +12,7 @@ export function CommandPalette() {
   const [search, setSearch] = useState("");
   const [events, setEvents] = useState<EventDetail[]>([]);
   const [artists, setArtists] = useState<ArtistWithCount[]>([]);
-  const [venues, setVenues] = useState<EntityWithCount[]>([]);
+  const [venues, setVenues] = useState<VenueWithCount[]>([]);
   const [locations, setLocations] = useState<LocationWithCount[]>([]);
 
   useEffect(() => {
@@ -58,7 +58,11 @@ export function CommandPalette() {
 
   const filteredVenues = useMemo(() => {
     if (!q) return venues.slice(0, 10);
-    return venues.filter((v) => v.name.toLowerCase().includes(q)).slice(0, 10);
+    return venues.filter((v) =>
+      v.name.toLowerCase().includes(q) ||
+      v.city.toLowerCase().includes(q) ||
+      v.state.toLowerCase().includes(q)
+    ).slice(0, 10);
   }, [venues, q]);
 
   const filteredLocations = useMemo(() => {
@@ -141,6 +145,9 @@ export function CommandPalette() {
                   >
                     <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="truncate">{venue.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                      {venue.city}, {venue.state}
+                    </span>
                   </Command.Item>
                 ))}
               </Command.Group>

@@ -15,11 +15,11 @@ Personal desktop app for tracking live music attendance. Import history from CSV
 - **Dashboard** with show totals, top artists/venues, and shows per year/month
 - **Events** — full CRUD, multi-day support (start/end dates), cancelled event tracking, drag-and-drop artist reordering, form validation
 - **Artists** — rename, merge duplicates, b2b set grouping, per-artist profile pages with genres
-- **Venues** — rename, merge duplicates
+- **Venues** — rename, merge duplicates; the same venue name can exist in different cities (e.g., "The Independent" in SF and Austin are tracked as distinct venues)
 - **Locations** — city/state, rename, merge duplicates
-- **Command palette** — global search across events, artists, venues, and locations (`Cmd/Ctrl+K`)
-- **CSV import/export** — auto-detects delimiter, handles b2b artists, preserves grouping on export, append-only with deduplication on (name, date, venue)
-- **Backup/restore** — SQLite database copy with native file dialogs
+- **Command palette** — global search across events, artists, venues, and locations (`Cmd/Ctrl+K`); venue search matches against city and state too
+- **CSV import/export** — auto-detects delimiter, handles b2b artists, preserves grouping on export, append-only with deduplication on (name, date, venue). Import refuses to silently merge a venue name into a different city — conflicting rows are flagged so you can resolve them.
+- **Backup/restore** — SQLite database copy with native file dialogs. Restore refuses backups created by a newer version of the app, so a backup from a future install won't silently corrupt an older one.
 - **Dark mode** — system default with manual toggle, persisted
 - **Accent colors** — 7 presets, persisted
 - **Autocomplete** — venue, city, state, and artist fields suggest existing entities

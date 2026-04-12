@@ -81,10 +81,13 @@ export interface MusicBrainzMatch {
   begin_year: string;
 }
 
-export interface EntityWithCount {
+export interface VenueWithCount {
   id: number;
   name: string;
   event_count: number;
+  location_id: number;
+  city: string;
+  state: string;
 }
 
 export interface ArtistWithCount {

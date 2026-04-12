@@ -26,11 +26,10 @@ import {
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
-  { to: "/events", label: "Events", icon: <Calendar className="h-4 w-4" />, children: [
-    { to: "/artists", label: "Artists", icon: <Mic2 className="h-3.5 w-3.5" /> },
-    { to: "/venues", label: "Venues", icon: <Building2 className="h-3.5 w-3.5" /> },
-    { to: "/locations", label: "Locations", icon: <MapPin className="h-3.5 w-3.5" /> },
-  ]},
+  { to: "/events", label: "Events", icon: <Calendar className="h-4 w-4" /> },
+  { to: "/artists", label: "Artists", icon: <Mic2 className="h-4 w-4" /> },
+  { to: "/venues", label: "Venues", icon: <Building2 className="h-4 w-4" /> },
+  { to: "/locations", label: "Locations", icon: <MapPin className="h-4 w-4" /> },
 ];
 
 const SETTINGS_NAV = { to: "/settings", label: "Settings", icon: <Settings className="h-4 w-4" /> };
@@ -95,45 +94,23 @@ function AppLayout() {
           </NavLink>
         </div>
         <div className="flex flex-col gap-1">
-          {NAV_ITEMS.map(({ to, label, icon, children }) => (
-            <div key={to}>
-              <NavLink
-                to={to}
-                end={to === "/"}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                  )
-                }
-              >
-                {icon}
-                {label}
-              </NavLink>
-              {children && (
-                <div className="flex flex-col gap-0.5 ml-4 mt-0.5">
-                  {children.map((child) => (
-                    <NavLink
-                      key={child.to}
-                      to={child.to}
-                      className={({ isActive }) =>
-                        cn(
-                          "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-                          isActive
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                            : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                        )
-                      }
-                    >
-                      {child.icon}
-                      {child.label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
+          {NAV_ITEMS.map(({ to, label, icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === "/"}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                )
+              }
+            >
+              {icon}
+              {label}
+            </NavLink>
           ))}
         </div>
         <div className="mt-auto flex flex-col gap-1">

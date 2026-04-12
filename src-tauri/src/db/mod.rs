@@ -31,6 +31,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/010_add_artist_links.sql"),
     // v11: setlist cache table
     include_str!("../../migrations/011_add_setlist_cache.sql"),
+    // v12: venues own their location; drop location_id from events
+    "", // procedural migration — handled below
 ];
 
 /// Initialize the SQLite database, run pending migrations, and return the connection pool.
@@ -72,9 +74,11 @@ pub async fn init(app_data_dir: PathBuf) -> Result<SqlitePool, sqlx::Error> {
             continue;
         }
 
-        // v3 is a procedural migration
+        // Procedural migrations dispatched by version number
         if version == 3 {
             migrate_b2b_artists(&pool).await?;
+        } else if version == 12 {
+            migrate_venue_owns_location(&pool).await?;
         } else if !sql.is_empty() {
             sqlx::raw_sql(sql).execute(&pool).await?;
         }
@@ -182,4 +186,90 @@ async fn find_or_create_artist_raw(pool: &SqlitePool, name: &str) -> Result<i64,
 pub fn db_path(app_data_dir: &Path) -> PathBuf {
     let db_name = if cfg!(debug_assertions) { "shows_dev.db" } else { "shows.db" };
     app_data_dir.join(db_name)
+}
+
+/// The highest schema version this build of the app knows how to read.
+/// Used by restore to refuse backups created by a newer build of the app,
+/// which would otherwise leave the database in an unreadable state on next
+/// launch (the migration runner only rolls forward, never back).
+pub fn max_schema_version() -> i64 {
+    MIGRATIONS.len() as i64
+}
+
+/// v12 — Move location ownership from `events` onto `venues`.
+///
+/// Each venue physically exists in one place, so the (name, location) pair is
+/// the natural identity. Previously `events.location_id` lived alongside
+/// `events.venue_id` with nothing enforcing they agreed, which let the same
+/// venue silently pick up different locations across events.
+///
+/// Implemented as a raw SQL script (instead of a sqlx transaction) because the
+/// table-rebuild dance needs `PRAGMA foreign_keys=OFF` around the DROP/rename
+/// steps, and that pragma cannot change inside a sqlx-managed transaction. We
+/// hand the whole script to SQLite and let it manage BEGIN/COMMIT itself —
+/// SQLite knows how to interleave PRAGMA toggles around its own transactions.
+///
+/// The script is idempotent against partial failure: if it fails before
+/// COMMIT, SQLite rolls back the whole transaction and `schema_version`
+/// doesn't advance, so the next launch retries from scratch.
+async fn migrate_venue_owns_location(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let sql = r#"
+PRAGMA foreign_keys=OFF;
+
+BEGIN TRANSACTION;
+
+ALTER TABLE venues ADD COLUMN location_id INTEGER REFERENCES locations(id);
+
+UPDATE venues SET location_id = (
+    SELECT e.location_id FROM events e
+    WHERE e.venue_id = venues.id
+    GROUP BY e.location_id
+    ORDER BY COUNT(*) DESC, MAX(e.date) DESC
+    LIMIT 1
+);
+
+DELETE FROM venues WHERE location_id IS NULL;
+
+CREATE TABLE venues_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    location_id INTEGER NOT NULL REFERENCES locations(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(name, location_id)
+);
+
+INSERT INTO venues_new (id, name, location_id, created_at)
+SELECT id, name, location_id, created_at FROM venues;
+
+DROP TABLE venues;
+ALTER TABLE venues_new RENAME TO venues;
+
+CREATE TABLE events_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    date TEXT NOT NULL,
+    end_date TEXT,
+    cancelled INTEGER NOT NULL DEFAULT 0,
+    venue_id INTEGER NOT NULL REFERENCES venues(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT INTO events_new (id, name, date, end_date, cancelled, venue_id, created_at, updated_at)
+SELECT id, name, date, end_date, cancelled, venue_id, created_at, updated_at FROM events;
+
+DROP TABLE events;
+ALTER TABLE events_new RENAME TO events;
+
+CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
+CREATE INDEX IF NOT EXISTS idx_events_venue_id ON events(venue_id);
+CREATE INDEX IF NOT EXISTS idx_venues_location_id ON venues(location_id);
+
+COMMIT;
+
+PRAGMA foreign_keys=ON;
+"#;
+
+    sqlx::raw_sql(sql).execute(pool).await?;
+    Ok(())
 }

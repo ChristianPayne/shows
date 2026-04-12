@@ -69,6 +69,7 @@ pub fn run() {
             genres::search_musicbrainz,
             genres::apply_musicbrainz_match,
             maintenance::wipe_database,
+            maintenance::get_db_version,
             settings::get_setting,
             settings::set_setting,
             updater::fetch_update,

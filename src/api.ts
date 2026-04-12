@@ -1,7 +1,7 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type {
   EventDetail,
-  EntityWithCount,
+  VenueWithCount,
   LocationWithCount,
   Stats,
   ImportResult,
@@ -50,7 +50,7 @@ export const getArtistStats = (artistId: number) =>
 export const getArtistLinks = (artistId: number) =>
   invoke<ArtistLinks | null>("get_artist_links", { artistId });
 
-export const getVenues = () => invoke<EntityWithCount[]>("get_venues");
+export const getVenues = () => invoke<VenueWithCount[]>("get_venues");
 
 export const getLocations = () =>
   invoke<LocationWithCount[]>("get_locations");
@@ -145,6 +145,8 @@ export const clearArtistMetadata = (artistId: number) =>
 // ── Maintenance ──
 
 export const wipeDatabase = () => invoke<void>("wipe_database");
+
+export const getDbVersion = () => invoke<number>("get_db_version");
 
 // ── Updater ──
 

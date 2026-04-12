@@ -57,23 +57,28 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
   const [cityNames, setCityNames] = useState<string[]>([]);
   const [stateNames, setStateNames] = useState<string[]>([]);
   const [artistNames, setArtistNames] = useState<string[]>([]);
-  const [venueLocationMap, setVenueLocationMap] = useState<Map<string, { city: string; state: string }>>(new Map());
+  // A venue name can now exist in multiple cities (e.g., "The Independent" in
+  // SF and Austin), so the map is name → list of locations. Picking a venue
+  // only auto-fills the location if it's unambiguous.
+  const [venueLocationMap, setVenueLocationMap] = useState<Map<string, { city: string; state: string }[]>>(new Map());
 
   useEffect(() => {
-    api.getVenues().then((v) => setVenueNames(v.map((x) => x.name)));
+    api.getVenues().then((venues) => {
+      // Distinct venue names for the autocomplete dropdown
+      setVenueNames([...new Set(venues.map((v) => v.name))]);
+      const map = new Map<string, { city: string; state: string }[]>();
+      for (const v of venues) {
+        const list = map.get(v.name) ?? [];
+        list.push({ city: v.city, state: v.state });
+        map.set(v.name, list);
+      }
+      setVenueLocationMap(map);
+    });
     api.getLocations().then((l) => {
       setCityNames([...new Set(l.map((x) => x.city))]);
       setStateNames([...new Set(l.map((x) => x.state))]);
     });
     api.getArtists().then((a) => setArtistNames(a.map((x) => x.name)));
-    // Build venue → location map from existing events
-    api.getEvents().then((events) => {
-      const map = new Map<string, { city: string; state: string }>();
-      for (const event of events) {
-        map.set(event.venue, { city: event.city, state: event.state });
-      }
-      setVenueLocationMap(map);
-    });
   }, []);
 
   const availableArtists = useMemo(
@@ -211,15 +216,29 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
             value={venue}
             onChange={(v) => {
               setVenue(v);
-              const loc = venueLocationMap.get(v);
-              if (loc) {
-                setCity(loc.city);
-                setState(loc.state);
+              // Auto-fill location only when there's no ambiguity. If the same
+              // venue name lives in multiple cities, the user has to specify
+              // which one — that fills in the disambiguator.
+              const locations = venueLocationMap.get(v);
+              if (locations && locations.length === 1) {
+                setCity(locations[0].city);
+                setState(locations[0].state);
               }
             }}
             suggestions={venueNames}
             placeholder="e.g., Pier 80"
           />
+          {(() => {
+            const locations = venueLocationMap.get(venue);
+            if (locations && locations.length > 1) {
+              return (
+                <p className="text-xs text-muted-foreground">
+                  Multiple venues named "{venue}" exist. Fill in city and state to pick the right one (or create a new one).
+                </p>
+              );
+            }
+            return null;
+          })()}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

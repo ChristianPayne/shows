@@ -44,13 +44,17 @@ pub async fn find_or_create_location(
     Ok(result.last_insert_rowid())
 }
 
+/// Find or create a venue by (name, location). Same name in different
+/// cities is a different venue.
 pub async fn find_or_create_venue(
     pool: &SqlitePool,
     name: &str,
+    location_id: i64,
 ) -> Result<i64, sqlx::Error> {
     let row: Option<(i64,)> =
-        sqlx::query_as("SELECT id FROM venues WHERE name = ?1")
+        sqlx::query_as("SELECT id FROM venues WHERE name = ?1 AND location_id = ?2")
             .bind(name)
+            .bind(location_id)
             .fetch_optional(pool)
             .await?;
 
@@ -58,12 +62,25 @@ pub async fn find_or_create_venue(
         return Ok(id);
     }
 
-    let result = sqlx::query("INSERT INTO venues (name) VALUES (?1)")
+    let result = sqlx::query("INSERT INTO venues (name, location_id) VALUES (?1, ?2)")
         .bind(name)
+        .bind(location_id)
         .execute(pool)
         .await?;
 
     Ok(result.last_insert_rowid())
+}
+
+/// Look up venues by name across all locations. Used by CSV import to detect
+/// when a CSV row mentions a venue that already exists at a different location.
+pub async fn find_venues_by_name(
+    pool: &SqlitePool,
+    name: &str,
+) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    sqlx::query_as("SELECT id, location_id FROM venues WHERE name = ?1")
+        .bind(name)
+        .fetch_all(pool)
+        .await
 }
 
 pub async fn find_or_create_artist(
@@ -91,23 +108,22 @@ pub async fn find_or_create_artist(
 // ── Event CRUD ──
 
 /// Each artist entry includes an optional set_group for b2b grouping.
+/// Location is derived from the venue, so it's no longer a parameter.
 pub async fn create_event(
     pool: &SqlitePool,
     name: &str,
     date: &str,
     end_date: Option<&str>,
     venue_id: i64,
-    location_id: i64,
     artists: &[(i64, Option<i64>)],
 ) -> Result<i64, sqlx::Error> {
     let result = sqlx::query(
-        "INSERT INTO events (name, date, end_date, venue_id, location_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO events (name, date, end_date, venue_id) VALUES (?1, ?2, ?3, ?4)",
     )
     .bind(name)
     .bind(date)
     .bind(end_date)
     .bind(venue_id)
-    .bind(location_id)
     .execute(pool)
     .await?;
 
@@ -132,7 +148,6 @@ pub struct UpdateEventInput<'a> {
     pub date: &'a str,
     pub end_date: Option<&'a str>,
     pub venue_id: i64,
-    pub location_id: i64,
     pub artists: &'a [(i64, Option<i64>)],
 }
 
@@ -142,13 +157,12 @@ pub async fn update_event(
     input: UpdateEventInput<'_>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE events SET name = ?1, date = ?2, end_date = ?3, venue_id = ?4, location_id = ?5, updated_at = datetime('now') WHERE id = ?6",
+        "UPDATE events SET name = ?1, date = ?2, end_date = ?3, venue_id = ?4, updated_at = datetime('now') WHERE id = ?5",
     )
     .bind(input.name)
     .bind(input.date)
     .bind(input.end_date)
     .bind(input.venue_id)
-    .bind(input.location_id)
     .bind(event_id)
     .execute(pool)
     .await?;
@@ -259,9 +273,39 @@ pub async fn merge_venues(pool: &SqlitePool, keep_id: i64, merge_id: i64) -> Res
     Ok(())
 }
 
-/// Merge one location into another. Reassigns all events, then deletes the duplicate.
+/// Merge one location into another. Reassigns all venues, then deletes the duplicate.
+/// Note: this can create venue duplicates if both locations had a venue with the same
+/// name. Those collisions are handled by INSERT OR IGNORE — the merged-from venue is
+/// simply dropped if its name already exists at the keep location, and its events
+/// fall through to the existing venue via the venue merge below.
 pub async fn merge_locations(pool: &SqlitePool, keep_id: i64, merge_id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE events SET location_id = ?1 WHERE location_id = ?2")
+    // Find venue collisions: venues at merge_id whose name already exists at keep_id.
+    let collisions: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT old.id, new.id
+         FROM venues old
+         JOIN venues new ON old.name = new.name
+         WHERE old.location_id = ?1 AND new.location_id = ?2",
+    )
+    .bind(merge_id)
+    .bind(keep_id)
+    .fetch_all(pool)
+    .await?;
+
+    // Reassign each colliding venue's events to the surviving venue, then drop the dup.
+    for (old_id, new_id) in collisions {
+        sqlx::query("UPDATE events SET venue_id = ?1 WHERE venue_id = ?2")
+            .bind(new_id)
+            .bind(old_id)
+            .execute(pool)
+            .await?;
+        sqlx::query("DELETE FROM venues WHERE id = ?1")
+            .bind(old_id)
+            .execute(pool)
+            .await?;
+    }
+
+    // Move any remaining venues at the merge location to the keep location.
+    sqlx::query("UPDATE venues SET location_id = ?1 WHERE location_id = ?2")
         .bind(keep_id)
         .bind(merge_id)
         .execute(pool)
@@ -295,12 +339,17 @@ pub async fn delete_artist(pool: &SqlitePool, artist_id: i64) -> Result<(), sqlx
     Ok(())
 }
 
-/// Delete a location only if it has no linked events.
+/// Delete a location only if no venues live there. (Venues, in turn, are only
+/// deletable when they have no events — so this transitively guarantees no
+/// events depend on the location either.)
 pub async fn delete_location(pool: &SqlitePool, location_id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM locations WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM events WHERE location_id = ?1)")
-        .bind(location_id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "DELETE FROM locations WHERE id = ?1
+         AND NOT EXISTS (SELECT 1 FROM venues WHERE location_id = ?1)",
+    )
+    .bind(location_id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -346,10 +395,11 @@ pub async fn get_artist_stats(pool: &SqlitePool, artist_id: i64) -> Result<Artis
     .fetch_one(pool)
     .await?;
 
-    // Unique locations
+    // Unique locations — reached through the artist's venues
     let (unique_locations,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(DISTINCT e.location_id) FROM events e
+        "SELECT COUNT(DISTINCT v.location_id) FROM events e
          JOIN event_artists ea ON e.id = ea.event_id
+         JOIN venues v ON e.venue_id = v.id
          WHERE ea.artist_id = ?1"
     )
     .bind(artist_id)
@@ -473,11 +523,11 @@ pub async fn get_artist_context_for_event(
 
 pub async fn get_all_events(pool: &SqlitePool) -> Result<Vec<EventDetail>, sqlx::Error> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, e.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
-         JOIN locations l ON e.location_id = l.id
+         JOIN locations l ON v.location_id = l.id
          ORDER BY e.date DESC",
     )
     .fetch_all(pool)
@@ -519,11 +569,11 @@ pub async fn get_event_by_id(
     event_id: i64,
 ) -> Result<Option<EventDetail>, sqlx::Error> {
     let row: Option<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, e.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
-         JOIN locations l ON e.location_id = l.id
+         JOIN locations l ON v.location_id = l.id
          WHERE e.id = ?1",
     )
     .bind(event_id)
@@ -580,10 +630,11 @@ pub async fn get_artists_with_counts(
 
 pub async fn get_venues_with_counts(
     pool: &SqlitePool,
-) -> Result<Vec<EntityWithCount>, sqlx::Error> {
-    let rows: Vec<EntityWithCount> = sqlx::query_as(
-        "SELECT v.id, v.name, COUNT(e.id) as event_count
+) -> Result<Vec<VenueWithCount>, sqlx::Error> {
+    let rows: Vec<VenueWithCount> = sqlx::query_as(
+        "SELECT v.id, v.name, COUNT(e.id) as event_count, v.location_id, l.city, l.state
          FROM venues v
+         JOIN locations l ON v.location_id = l.id
          LEFT JOIN events e ON v.id = e.venue_id
          GROUP BY v.id
          ORDER BY CASE WHEN v.name LIKE 'The %' THEN substr(v.name, 5) ELSE v.name END",
@@ -600,7 +651,8 @@ pub async fn get_locations_with_counts(
     let rows: Vec<LocationWithCount> = sqlx::query_as(
         "SELECT l.id, l.city, l.state, COUNT(e.id) as event_count
          FROM locations l
-         LEFT JOIN events e ON l.id = e.location_id
+         LEFT JOIN venues v ON l.id = v.location_id
+         LEFT JOIN events e ON v.id = e.venue_id
          GROUP BY l.id
          ORDER BY l.state, l.city",
     )
@@ -615,11 +667,11 @@ pub async fn get_events_for_artist(
     artist_id: i64,
 ) -> Result<Vec<EventDetail>, sqlx::Error> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, e.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
-         JOIN locations l ON e.location_id = l.id
+         JOIN locations l ON v.location_id = l.id
          JOIN event_artists ea ON e.id = ea.event_id
          WHERE ea.artist_id = ?1
          ORDER BY e.date DESC",
@@ -663,11 +715,11 @@ pub async fn get_events_for_venue(
     venue_id: i64,
 ) -> Result<Vec<EventDetail>, sqlx::Error> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, e.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
-         JOIN locations l ON e.location_id = l.id
+         JOIN locations l ON v.location_id = l.id
          WHERE e.venue_id = ?1
          ORDER BY e.date DESC",
     )
@@ -710,12 +762,12 @@ pub async fn get_events_for_location(
     location_id: i64,
 ) -> Result<Vec<EventDetail>, sqlx::Error> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, e.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
-         JOIN locations l ON e.location_id = l.id
-         WHERE e.location_id = ?1
+         JOIN locations l ON v.location_id = l.id
+         WHERE v.location_id = ?1
          ORDER BY e.date DESC",
     )
     .bind(location_id)

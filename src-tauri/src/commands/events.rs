@@ -104,7 +104,7 @@ pub async fn create_event(
         .await
         .map_err(|e| e.to_string())?;
 
-    let venue_id = queries::find_or_create_venue(&pool, &input.venue)
+    let venue_id = queries::find_or_create_venue(&pool, &input.venue, location_id)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -119,7 +119,7 @@ pub async fn create_event(
         }
     }
 
-    let event_id = queries::create_event(&pool, &input.name, &input.date, input.end_date.as_deref(), venue_id, location_id, &artists)
+    let event_id = queries::create_event(&pool, &input.name, &input.date, input.end_date.as_deref(), venue_id, &artists)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -144,7 +144,7 @@ pub async fn update_event(
         .await
         .map_err(|e| e.to_string())?;
 
-    let venue_id = queries::find_or_create_venue(&pool, &input.venue)
+    let venue_id = queries::find_or_create_venue(&pool, &input.venue, location_id)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -167,7 +167,6 @@ pub async fn update_event(
             date: &input.date,
             end_date: input.end_date.as_deref(),
             venue_id,
-            location_id,
             artists: &artists,
         },
     )

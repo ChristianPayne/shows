@@ -10,13 +10,13 @@ import { MergeDialog } from "@/components/MergeDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
-import type { EntityWithCount, EventDetail } from "@/types";
+import type { VenueWithCount, EventDetail } from "@/types";
 
 let lastVenueCount = 0;
 
 export function VenuesListPage() {
   const navigate = useNavigate();
-  const [venues, setVenues] = useState<EntityWithCount[] | null>(null);
+  const [venues, setVenues] = useState<VenueWithCount[] | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -49,7 +49,11 @@ export function VenuesListPage() {
     if (!venues) return [];
     const q = search.toLowerCase();
     let result = venues;
-    if (q) result = result.filter((v) => v.name.toLowerCase().includes(q));
+    if (q) result = result.filter((v) =>
+      v.name.toLowerCase().includes(q) ||
+      v.city.toLowerCase().includes(q) ||
+      v.state.toLowerCase().includes(q)
+    );
     return [...result].sort((a, b) => {
       let cmp = sortBy === "count"
         ? a.event_count - b.event_count
@@ -94,7 +98,12 @@ export function VenuesListPage() {
                 onClick={() => navigate(`/venues/${venue.id}`)}
               >
                 <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
-                <span className="flex-1 min-w-0 text-sm font-medium truncate">{venue.name}</span>
+                <span className="flex-1 min-w-0 text-sm font-medium truncate">
+                  {venue.name}
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">
+                    {venue.city}, {venue.state}
+                  </span>
+                </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="w-1/4 shrink-0 h-5 bg-muted rounded overflow-hidden relative">
@@ -128,7 +137,7 @@ export function VenueDetailPage() {
   const navigate = useNavigate();
   const venueId = Number(id);
 
-  const [venues, setVenues] = useState<EntityWithCount[]>([]);
+  const [venues, setVenues] = useState<VenueWithCount[]>([]);
   const [events, setEvents] = useState<EventDetail[]>([]);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -170,7 +179,7 @@ export function VenueDetailPage() {
             <h1 className="text-xl font-semibold">{venue.name}</h1>
           )}
           <p className="text-sm text-muted-foreground">
-            {venue.event_count} event{venue.event_count !== 1 ? "s" : ""}
+            {venue.city}, {venue.state} · {venue.event_count} event{venue.event_count !== 1 ? "s" : ""}
           </p>
         </div>
         <ActionsMenu

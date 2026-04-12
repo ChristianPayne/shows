@@ -98,9 +98,34 @@ pub async fn import_csv(pool: State<'_, SqlitePool>, csv_content: String) -> Res
             .await
             .map_err(|e| format!("Row {}: Failed to create location — {}", line_num + 2, e))?;
 
-        let venue_id = queries::find_or_create_venue(pool.inner(), venue_name)
+        // CSV import is strict about venue ↔ location pairing: a single venue
+        // name in the import is expected to live at exactly one location.
+        // Detect both flavors of conflict before creating anything:
+        //   1) the same venue name already exists in the DB at a *different*
+        //      location than this row claims
+        //   2) the same venue name exists in the DB at *multiple* locations
+        //      already, and none match this row, so we can't pick safely
+        let existing_venues = queries::find_venues_by_name(pool.inner(), venue_name)
             .await
-            .map_err(|e| format!("Row {}: Failed to create venue — {}", line_num + 2, e))?;
+            .map_err(|e| format!("Row {}: Failed to look up venue — {}", line_num + 2, e))?;
+
+        let venue_id = if let Some(&(id, _)) = existing_venues
+            .iter()
+            .find(|(_, loc)| *loc == location_id)
+        {
+            id
+        } else if !existing_venues.is_empty() {
+            return Err(format!(
+                "Row {}: Venue '{}' already exists at a different location. \
+                 The CSV row says '{}, {}' but the database has it at a different city. \
+                 Resolve the conflict (rename one venue, fix the CSV, or use the UI) and re-run the import.",
+                line_num + 2, venue_name, city, state
+            ));
+        } else {
+            queries::find_or_create_venue(pool.inner(), venue_name, location_id)
+                .await
+                .map_err(|e| format!("Row {}: Failed to create venue — {}", line_num + 2, e))?
+        };
 
         // Skip if an event with the same name, date, and venue already exists
         let existing: Option<(i64,)> = sqlx::query_as(
@@ -148,7 +173,7 @@ pub async fn import_csv(pool: State<'_, SqlitePool>, csv_content: String) -> Res
             }
         }
 
-        queries::create_event(pool.inner(), event_name, &date, end_date.as_deref(), venue_id, location_id, &artists)
+        queries::create_event(pool.inner(), event_name, &date, end_date.as_deref(), venue_id, &artists)
             .await
             .map_err(|e| format!("Row {}: Failed to create event — {}", line_num + 2, e))?;
 

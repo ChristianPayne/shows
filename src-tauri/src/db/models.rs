@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 // Canonical row shapes that mirror the SQLite schema 1:1. Currently unused —
-// the codebase prefers join-aware variants like EventDetail and EntityWithCount —
+// the codebase prefers join-aware variants like EventDetail and VenueWithCount —
 // but kept as the source of truth for what each table looks like, and so
 // future queries can `query_as::<_, Location>` etc. without redefining.
 
@@ -184,12 +184,16 @@ pub struct MonthCount {
     pub count: i64,
 }
 
-/// Used by the frontend for autocomplete and entity lists with counts.
+/// Venues need location context in list views since the same name can exist in
+/// different cities (e.g., "The Independent" in SF vs Austin).
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct EntityWithCount {
+pub struct VenueWithCount {
     pub id: i64,
     pub name: String,
     pub event_count: i64,
+    pub location_id: i64,
+    pub city: String,
+    pub state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
