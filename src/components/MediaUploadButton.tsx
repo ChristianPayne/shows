@@ -3,13 +3,14 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as api from "@/api";
+import { ALL_MEDIA_EXTENSIONS } from "@/lib/media";
 
-interface ImageUploadButtonProps {
+interface MediaUploadButtonProps {
   eventId: number;
   onUploaded: () => void | Promise<void>;
 }
 
-export function ImageUploadButton({ eventId, onUploaded }: ImageUploadButtonProps) {
+export function MediaUploadButton({ eventId, onUploaded }: MediaUploadButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,7 +19,7 @@ export function ImageUploadButton({ eventId, onUploaded }: ImageUploadButtonProp
     const selected = await open({
       multiple: true,
       filters: [
-        { name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif"] },
+        { name: "Images and videos", extensions: [...ALL_MEDIA_EXTENSIONS] },
       ],
     });
     if (!selected) return;
@@ -28,7 +29,7 @@ export function ImageUploadButton({ eventId, onUploaded }: ImageUploadButtonProp
     setBusy(true);
     try {
       for (const path of paths) {
-        await api.addEventImage(eventId, path);
+        await api.addEventMedia(eventId, path);
       }
       await onUploaded();
     } catch (err) {
@@ -48,7 +49,7 @@ export function ImageUploadButton({ eventId, onUploaded }: ImageUploadButtonProp
         disabled={busy}
       >
         <Upload className="mr-2 h-4 w-4" />
-        {busy ? "Uploading..." : "Add images"}
+        {busy ? "Uploading..." : "Add media"}
       </Button>
       {error && <span className="text-xs text-destructive">{error}</span>}
     </div>

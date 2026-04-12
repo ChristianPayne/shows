@@ -17,8 +17,9 @@ import { Separator } from "@/components/ui/separator";
 import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown, Music, RefreshCcw, Sun, Moon } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { ACCENT_PRESETS } from "@/lib/accent";
+import { CsvPreviewDialog } from "@/components/CsvPreviewDialog";
 import * as api from "@/api";
-import type { ImportResult } from "@/types";
+import type { ImportResult, PreviewRow } from "@/types";
 
 interface SettingsPageProps {
   accentId: string;
@@ -67,6 +68,12 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
   const [importError, setImportError] = useState("");
   const [importSuccess, setImportSuccess] = useState<ImportResult | null>(null);
   const [importing, setImporting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
+  // Stash the CSV text across the two-phase flow so the confirm handler can
+  // feed the same bytes to import_csv_filtered that were parsed for preview —
+  // guarantees the row_index numbers still line up.
+  const [previewCsv, setPreviewCsv] = useState("");
   const [backupMsg, setBackupMsg] = useState("");
   const [exportMsg, setExportMsg] = useState("");
   const [restoreMsg, setRestoreMsg] = useState("");
@@ -87,20 +94,42 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setImporting(true);
     setImportError("");
     setImportSuccess(null);
 
     try {
       const text = await file.text();
-      const result = await api.importCsv(text);
-      setImportSuccess(result);
+      const rows = await api.previewCsvImport(text);
+      setPreviewCsv(text);
+      setPreviewRows(rows);
+      setPreviewOpen(true);
     } catch (err) {
       setImportError(String(err));
     }
 
-    setImporting(false);
+    // Reset the file input now so re-selecting the same file re-opens the
+    // preview even though the input's value hasn't changed.
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleConfirmImport = async (selectedIndices: number[]) => {
+    setImporting(true);
+    setImportError("");
+    setImportSuccess(null);
+    try {
+      const result = await api.importCsvFiltered(previewCsv, selectedIndices);
+      setImportSuccess(result);
+      setPreviewOpen(false);
+    } catch (err) {
+      setImportError(String(err));
+      setPreviewOpen(false);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCancelImport = () => {
+    setPreviewOpen(false);
   };
 
   const handleBackup = async () => {
@@ -403,6 +432,14 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
           <p className="text-sm text-muted-foreground">{wipeMsg}</p>
         )}
       </div>
+
+      <CsvPreviewDialog
+        open={previewOpen}
+        rows={previewRows}
+        onCancel={handleCancelImport}
+        onConfirm={handleConfirmImport}
+        importing={importing}
+      />
     </div>
   );
 }

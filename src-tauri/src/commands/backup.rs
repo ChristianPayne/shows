@@ -9,16 +9,18 @@ use zip::write::{SimpleFileOptions, ZipWriter};
 use zip::{CompressionMethod, ZipArchive};
 
 use crate::db;
-use crate::util::images_root;
+use crate::util::media_root;
 
 /// Name used for the database entry inside every zip backup. Restore looks
 /// for exactly this name, so don't change it without a format version bump.
 const DB_ENTRY: &str = "shows.db";
 
-/// Root prefix for image entries inside the zip. Matches the on-disk layout
-/// under the app data dir so restore can extract to `<app_data_dir>/images/`
-/// by stripping this prefix.
-const IMAGES_PREFIX: &str = "images/";
+/// Root prefix for media entries inside new zip backups. Matches the on-disk
+/// layout under the app data dir so restore extracts directly to
+/// `<app_data_dir>/media/`. Pre-v14 backups used `images/` — `restore_from_zip`
+/// accepts both prefixes so legacy backups still round-trip.
+const MEDIA_PREFIX: &str = "media/";
+const LEGACY_IMAGES_PREFIX: &str = "images/";
 
 #[tauri::command]
 pub async fn backup_database(
@@ -53,10 +55,10 @@ pub async fn backup_database(
     zip.write_all(&db_bytes)
         .map_err(|e| format!("Failed to write database to zip: {}", e))?;
 
-    // Add every image under images/ preserving relative structure.
-    let img_root = images_root(&app_data_dir);
-    if img_root.exists() {
-        add_dir_recursive(&mut zip, &img_root, &img_root, options)?;
+    // Add every media file under media/ preserving relative structure.
+    let root = media_root(&app_data_dir);
+    if root.exists() {
+        add_dir_recursive(&mut zip, &root, &root, options)?;
     }
 
     zip.finish()
@@ -66,7 +68,7 @@ pub async fn backup_database(
 }
 
 /// Walk `dir` recursively, adding every file into the zip with a path
-/// relative to `root`, prefixed with `images/` so the archive mirrors the
+/// relative to `root`, prefixed with `media/` so the archive mirrors the
 /// on-disk layout.
 fn add_dir_recursive(
     zip: &mut ZipWriter<File>,
@@ -88,7 +90,7 @@ fn add_dir_recursive(
         let rel = path
             .strip_prefix(root)
             .map_err(|e| format!("Path strip failed: {}", e))?;
-        let name = format!("{}{}", IMAGES_PREFIX, rel.to_string_lossy().replace('\\', "/"));
+        let name = format!("{}{}", MEDIA_PREFIX, rel.to_string_lossy().replace('\\', "/"));
 
         zip.start_file(&name, options)
             .map_err(|e| format!("Failed to start entry {}: {}", name, e))?;
@@ -183,22 +185,22 @@ async fn restore_from_zip(app_data_dir: &Path, source_path: &Path) -> Result<(),
     std::fs::copy(&tmp_db, &dest_db)
         .map_err(|e| format!("Failed to install restored DB: {}", e))?;
 
-    // Now swap the images directory. Rename-old → extract-new → delete-old,
+    // Now swap the media directory. Rename-old → extract-new → delete-old,
     // with a rollback to the stashed directory if extraction fails.
-    let img_dest = images_root(app_data_dir);
-    let stash = app_data_dir.join("images.old");
+    let media_dest = media_root(app_data_dir);
+    let stash = app_data_dir.join("media.old");
     if stash.exists() {
         let _ = std::fs::remove_dir_all(&stash);
     }
-    if img_dest.exists() {
-        std::fs::rename(&img_dest, &stash)
-            .map_err(|e| format!("Failed to stash existing images: {}", e))?;
+    if media_dest.exists() {
+        std::fs::rename(&media_dest, &stash)
+            .map_err(|e| format!("Failed to stash existing media: {}", e))?;
     }
 
-    std::fs::create_dir_all(&img_dest)
-        .map_err(|e| format!("Failed to create images dir: {}", e))?;
+    std::fs::create_dir_all(&media_dest)
+        .map_err(|e| format!("Failed to create media dir: {}", e))?;
 
-    let extract_result = extract_images(&mut archive, &img_dest);
+    let extract_result = extract_media(&mut archive, &media_dest);
     match extract_result {
         Ok(_) => {
             if stash.exists() {
@@ -207,9 +209,9 @@ async fn restore_from_zip(app_data_dir: &Path, source_path: &Path) -> Result<(),
         }
         Err(e) => {
             // Roll back: drop the half-extracted tree and put the stash back.
-            let _ = std::fs::remove_dir_all(&img_dest);
+            let _ = std::fs::remove_dir_all(&media_dest);
             if stash.exists() {
-                let _ = std::fs::rename(&stash, &img_dest);
+                let _ = std::fs::rename(&stash, &media_dest);
             }
             let _ = std::fs::remove_dir_all(&tmp_dir);
             return Err(e);
@@ -220,19 +222,24 @@ async fn restore_from_zip(app_data_dir: &Path, source_path: &Path) -> Result<(),
     Ok(())
 }
 
-/// Extract every `images/...` entry from the archive into `dest`. Entries
-/// outside the `images/` prefix are ignored — the only other expected entry
-/// is `shows.db`, which the caller has already handled.
-fn extract_images(archive: &mut ZipArchive<File>, dest: &Path) -> Result<(), String> {
+/// Extract every media entry from the archive into `dest`. New-format
+/// backups use the `media/` prefix; legacy backups (pre-v14) used `images/`,
+/// and we accept both so old zips still restore into the current `media/`
+/// layout. Entries outside both prefixes are ignored — the only other
+/// expected entry is `shows.db`, which the caller has already handled.
+fn extract_media(archive: &mut ZipArchive<File>, dest: &Path) -> Result<(), String> {
     for i in 0..archive.len() {
         let mut entry = archive
             .by_index(i)
             .map_err(|e| format!("Failed to read zip entry: {}", e))?;
         let name = entry.name().to_string();
-        if !name.starts_with(IMAGES_PREFIX) {
+        let rel = if let Some(r) = name.strip_prefix(MEDIA_PREFIX) {
+            r
+        } else if let Some(r) = name.strip_prefix(LEGACY_IMAGES_PREFIX) {
+            r
+        } else {
             continue;
-        }
-        let rel = &name[IMAGES_PREFIX.len()..];
+        };
         if rel.is_empty() {
             continue;
         }

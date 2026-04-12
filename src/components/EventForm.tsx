@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Autocomplete } from "@/components/Autocomplete";
 import { X, Plus, Link2 } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
@@ -289,16 +290,22 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
                     return (
                       <div key={`${artist.name}-${i}`} className="flex items-center gap-1">
                         {i > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className={`h-6 w-6 ${prevSameGroup ? "text-primary" : "text-muted-foreground"}`}
-                            onClick={() => toggleB2b(i)}
-                            title={prevSameGroup ? "Unlink b2b" : "Link as b2b"}
-                          >
-                            <Link2 className="h-3 w-3" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className={`h-6 w-6 ${prevSameGroup ? "text-primary" : "text-muted-foreground"}`}
+                                onClick={() => toggleB2b(i)}
+                              >
+                                <Link2 className="h-3 w-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              {prevSameGroup ? "Unlink b2b" : "Link as b2b"}
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                         {prevSameGroup && (
                           <span className="text-xs text-muted-foreground">b2b</span>

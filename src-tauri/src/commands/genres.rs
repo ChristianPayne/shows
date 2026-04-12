@@ -29,20 +29,54 @@ pub async fn fetch_genres(
     pool: State<'_, SqlitePool>,
     app_handle: tauri::AppHandle,
 ) -> Result<usize, String> {
-    fetch_genres_bg(pool.inner(), &app_handle).await
+    // Settings "Fetch all" button — no filter, scan the whole DB.
+    fetch_genres_bg(pool.inner(), &app_handle, None).await
 }
 
-/// Background-callable version that takes a raw pool reference.
+/// Background-callable version that takes a raw pool reference and an
+/// optional filter of artist IDs to limit the fetch to. `None` scans every
+/// un-matched artist in the DB (used by the Settings button and by a full
+/// CSV import's aftermath). `Some(ids)` restricts the scan to just those
+/// — used by `create_event` / `update_event` so editing an event only ever
+/// hits MusicBrainz for artists genuinely introduced by that mutation.
+///
+/// `Some(vec![])` is a valid no-op: if the caller already knows there are
+/// zero new artists to fetch, it still pays to call through this function
+/// so the `genre-progress` "done" event fires uniformly — otherwise the
+/// frontend's progress bar could get stuck from a prior run.
 pub async fn fetch_genres_bg(
     pool: &SqlitePool,
     app_handle: &tauri::AppHandle,
+    artist_ids: Option<Vec<i64>>,
 ) -> Result<usize, String> {
-    let artists: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT id, name FROM artists WHERE mbid IS NULL ORDER BY name"
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let artists: Vec<(i64, String)> = match &artist_ids {
+        None => sqlx::query_as(
+            "SELECT id, name FROM artists WHERE mbid IS NULL ORDER BY name",
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?,
+        Some(ids) if ids.is_empty() => Vec::new(),
+        Some(ids) => {
+            // Bind each id individually rather than inline the list — same
+            // SQLite placeholder-expansion pattern used by
+            // get_media_for_events in commands/media.rs.
+            let placeholders = std::iter::repeat_n("?", ids.len())
+                .collect::<Vec<_>>()
+                .join(",");
+            let sql = format!(
+                "SELECT id, name FROM artists \
+                 WHERE mbid IS NULL AND id IN ({}) \
+                 ORDER BY name",
+                placeholders
+            );
+            let mut q = sqlx::query_as::<_, (i64, String)>(&sql);
+            for id in ids {
+                q = q.bind(id);
+            }
+            q.fetch_all(pool).await.map_err(|e| e.to_string())?
+        }
+    };
 
     let total = artists.len();
     if total == 0 {

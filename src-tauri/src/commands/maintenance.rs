@@ -1,7 +1,7 @@
 use sqlx::SqlitePool;
 use tauri::{Manager, State};
 
-use crate::commands::images;
+use crate::commands::media;
 
 /// Returns the highest applied schema migration version. This is the database
 /// version, distinct from the app version — useful for surfacing in the UI so
@@ -26,9 +26,9 @@ pub async fn wipe_database(
         .await
         .map_err(|e| e.to_string())?;
 
-    // event_images cascade on events, but wipe explicitly so the DB is clean
+    // event_media cascades on events, but wipe explicitly so the DB is clean
     // even if a future migration drops the cascade.
-    sqlx::query("DELETE FROM event_images")
+    sqlx::query("DELETE FROM event_media")
         .execute(pool.inner())
         .await
         .map_err(|e| e.to_string())?;
@@ -53,10 +53,10 @@ pub async fn wipe_database(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Remove the on-disk image tree. The DB cascade already cleared the rows,
+    // Remove the on-disk media tree. The DB cascade already cleared the rows,
     // but the files themselves live outside SQLite's reach.
     if let Ok(app_dir) = app_handle.path().app_data_dir() {
-        images::remove_images_root(&app_dir);
+        media::remove_media_root(&app_dir);
     }
 
     Ok(())

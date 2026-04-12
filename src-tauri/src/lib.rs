@@ -1,11 +1,12 @@
 mod commands;
 mod db;
+mod metadata;
 mod updater;
 mod util;
 
 use std::sync::Mutex;
 
-use commands::{backup, entities, events, export, genres, images, import, links, maintenance, setlists, settings, stats};
+use commands::{backup, entities, events, export, genres, import, links, maintenance, media, setlists, settings, stats};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,11 +21,17 @@ pub fn run() {
             let app_data_dir = app.path().app_data_dir()
                 .expect("Failed to resolve app data directory");
 
-            // Initialize the database on a blocking runtime since setup is sync
-            let pool = tokio::runtime::Runtime::new()
-                .unwrap()
-                .block_on(db::init(app_data_dir))
+            // Run DB init and the dev-media-split first-launch migration on
+            // the same blocking runtime since setup is sync. The migration
+            // is a no-op in release (the dev/release roots collide), so this
+            // costs nothing for production users.
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let pool = rt
+                .block_on(db::init(app_data_dir.clone()))
                 .expect("Failed to initialize database");
+            if let Err(e) = rt.block_on(media::migrate_dev_media_split(&pool, &app_data_dir)) {
+                eprintln!("[startup] media split migration failed: {}", e);
+            }
 
             app.manage(pool);
             app.manage(updater::PendingUpdate(Mutex::new(None)));
@@ -58,6 +65,8 @@ pub fn run() {
             entities::delete_location,
             stats::get_stats,
             import::import_csv,
+            import::preview_csv_import,
+            import::import_csv_filtered,
             export::export_csv,
             backup::backup_database,
             backup::restore_database,
@@ -69,11 +78,11 @@ pub fn run() {
             links::get_artist_links,
             genres::search_musicbrainz,
             genres::apply_musicbrainz_match,
-            images::add_event_image,
-            images::get_event_images,
-            images::get_images_for_events,
-            images::delete_event_image,
-            images::update_event_image_caption,
+            media::add_event_media,
+            media::get_event_media,
+            media::get_media_for_events,
+            media::delete_event_media,
+            media::update_event_media_caption,
             maintenance::wipe_database,
             maintenance::get_db_version,
             settings::get_setting,

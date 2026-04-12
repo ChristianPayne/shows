@@ -23,7 +23,12 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$APPDATA/images/**", "$APPLOCALDATA/images/**"]
+          "allow": [
+            "$APPDATA/media/**",
+            "$APPLOCALDATA/media/**",
+            "$APPDATA/media_dev/**",
+            "$APPLOCALDATA/media_dev/**"
+          ]
         }
       }
     }

@@ -214,11 +214,19 @@ pub struct LocationWithCount {
     pub event_count: i64,
 }
 
-/// An image attached to an event. The on-disk path is computed at read time
-/// from the event's current name + id and the stored `filename`; we don't
-/// persist the absolute path because the event folder can be renamed.
+/// A media file (image or video) attached to an event. The on-disk path is
+/// computed at read time from the event's current name + id and the stored
+/// `filename`; we don't persist the absolute path because the event folder
+/// can be renamed. Images and videos live in the same table — `mime_type` is
+/// the field that distinguishes them.
+///
+/// `captured_at` is the media's own timestamp (EXIF DateTimeOriginal for
+/// images, mvhd creation_time for MP4/MOV). `created_at` is the upload time
+/// — distinct concept. Sorting prefers `captured_at` so chronologically-
+/// shot media appear in the order they were taken, not the order they
+/// were added to the app.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct EventImageRow {
+pub struct EventMediaRow {
     pub id: i64,
     pub event_id: i64,
     pub filename: String,
@@ -226,14 +234,15 @@ pub struct EventImageRow {
     pub file_size: i64,
     pub caption: Option<String>,
     pub created_at: String,
+    pub captured_at: Option<String>,
 }
 
-/// Image with its computed absolute filesystem path, ready to be wrapped by
-/// the frontend's `convertFileSrc`. `event_name` / `event_date` are populated
-/// by the bulk query for cross-entity galleries; on single-event fetches they
-/// are left empty.
+/// Media row with its computed absolute filesystem path, ready to be wrapped
+/// by the frontend's `convertFileSrc`. `event_name` / `event_date` are
+/// populated by the bulk query for cross-entity galleries; on single-event
+/// fetches they are left empty.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EventImage {
+pub struct EventMedia {
     pub id: i64,
     pub event_id: i64,
     pub filename: String,
@@ -241,6 +250,7 @@ pub struct EventImage {
     pub file_size: i64,
     pub caption: Option<String>,
     pub created_at: String,
+    pub captured_at: Option<String>,
     pub absolute_path: String,
     pub event_name: Option<String>,
     pub event_date: Option<String>,

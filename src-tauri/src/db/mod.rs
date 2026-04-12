@@ -35,6 +35,13 @@ const MIGRATIONS: &[&str] = &[
     "", // procedural migration — handled below
     // v13: event_images table for per-event lineup/photo attachments
     include_str!("../../migrations/013_event_images.sql"),
+    // v14: rename event_images → event_media and images/ → media/ on disk,
+    // widening the feature to hold videos as well as images.
+    "", // procedural migration — handled below
+    // v15: add nullable captured_at column for the media's embedded capture
+    // timestamp (EXIF DateTimeOriginal on images, mvhd creation_time on
+    // MP4/MOV) so galleries sort chronologically instead of by upload order.
+    include_str!("../../migrations/015_media_captured_at.sql"),
 ];
 
 /// Initialize the SQLite database, run pending migrations, and return the connection pool.
@@ -81,6 +88,8 @@ pub async fn init(app_data_dir: PathBuf) -> Result<SqlitePool, sqlx::Error> {
             migrate_b2b_artists(&pool).await?;
         } else if version == 12 {
             migrate_venue_owns_location(&pool).await?;
+        } else if version == 14 {
+            migrate_rename_media(&pool, &app_data_dir).await?;
         } else if !sql.is_empty() {
             sqlx::raw_sql(sql).execute(&pool).await?;
         }
@@ -270,6 +279,48 @@ CREATE INDEX IF NOT EXISTS idx_venues_location_id ON venues(location_id);
 COMMIT;
 
 PRAGMA foreign_keys=ON;
+"#;
+
+    sqlx::raw_sql(sql).execute(pool).await?;
+    Ok(())
+}
+
+/// v14 — Rename `event_images` → `event_media` and the on-disk `images/`
+/// folder → `media/`, reflecting that event attachments now cover both images
+/// and videos. Schema itself is otherwise unchanged; `mime_type` is the field
+/// that distinguishes images from videos.
+///
+/// The filesystem rename is the tricky bit. It's intentionally done *before*
+/// the SQL changes so that a mid-migration failure lands us in one of two
+/// recoverable states:
+///
+/// 1. Filesystem rename fails → SQL untouched, schema_version stays at 13,
+///    next launch retries the whole thing.
+/// 2. Filesystem rename succeeds, SQL fails → schema_version still at 13,
+///    next launch sees `media/` exists (source `images/` doesn't), skips the
+///    rename attempt, retries the SQL. Idempotent.
+///
+/// We never end up with a renamed table but a still-`images/` folder, which
+/// would leave absolute paths in the app broken.
+async fn migrate_rename_media(pool: &SqlitePool, app_data_dir: &Path) -> Result<(), sqlx::Error> {
+    let old = app_data_dir.join("images");
+    let new = app_data_dir.join("media");
+    if old.exists() && !new.exists() {
+        // If this rename fails we *don't* want to proceed to the SQL changes
+        // — bail out and let the next launch retry. Tunnel the io::Error
+        // through sqlx::Error::Protocol so we don't need a custom error type.
+        std::fs::rename(&old, &new)
+            .map_err(|e| sqlx::Error::Protocol(format!("Failed to rename images/ → media/: {}", e)))?;
+    }
+
+    let sql = r#"
+BEGIN TRANSACTION;
+
+ALTER TABLE event_images RENAME TO event_media;
+DROP INDEX IF EXISTS idx_event_images_event_id;
+CREATE INDEX idx_event_media_event_id ON event_media(event_id);
+
+COMMIT;
 "#;
 
     sqlx::raw_sql(sql).execute(pool).await?;

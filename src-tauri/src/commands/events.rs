@@ -2,7 +2,7 @@ use sqlx::SqlitePool;
 use tauri::{Manager, State};
 
 use crate::commands::genres;
-use crate::commands::images;
+use crate::commands::media;
 use crate::db::models::{ArtistContextSet, EventDetail};
 use crate::db::queries;
 
@@ -110,12 +110,16 @@ pub async fn create_event(
         .map_err(|e| e.to_string())?;
 
     let mut artists = Vec::new();
+    let mut new_artist_ids: Vec<i64> = Vec::new();
     for entry in &input.artists {
         let trimmed = entry.name.trim();
         if !trimmed.is_empty() {
-            let id = queries::find_or_create_artist(&pool, trimmed)
+            let (id, was_inserted) = queries::find_or_create_artist(&pool, trimmed)
                 .await
                 .map_err(|e| e.to_string())?;
+            if was_inserted {
+                new_artist_ids.push(id);
+            }
             artists.push((id, entry.set_group));
         }
     }
@@ -124,12 +128,17 @@ pub async fn create_event(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Fetch metadata for any new artists in the background
-    let pool_clone = pool.inner().clone();
-    let app_clone = app_handle.clone();
-    tokio::spawn(async move {
-        let _ = genres::fetch_genres_bg(&pool_clone, &app_clone).await;
-    });
+    // Only kick off MusicBrainz lookups when we actually inserted new
+    // artists. Unlike the old unconditional spawn — which re-scanned every
+    // un-matched artist in the DB on every event creation — this hits the
+    // network exactly once per truly-new name.
+    if !new_artist_ids.is_empty() {
+        let pool_clone = pool.inner().clone();
+        let app_clone = app_handle.clone();
+        tokio::spawn(async move {
+            let _ = genres::fetch_genres_bg(&pool_clone, &app_clone, Some(new_artist_ids)).await;
+        });
+    }
 
     Ok(event_id)
 }
@@ -150,12 +159,16 @@ pub async fn update_event(
         .map_err(|e| e.to_string())?;
 
     let mut artists = Vec::new();
+    let mut new_artist_ids: Vec<i64> = Vec::new();
     for entry in &input.artists {
         let trimmed = entry.name.trim();
         if !trimmed.is_empty() {
-            let id = queries::find_or_create_artist(&pool, trimmed)
+            let (id, was_inserted) = queries::find_or_create_artist(&pool, trimmed)
                 .await
                 .map_err(|e| e.to_string())?;
+            if was_inserted {
+                new_artist_ids.push(id);
+            }
             artists.push((id, entry.set_group));
         }
     }
@@ -176,7 +189,7 @@ pub async fn update_event(
                 .path()
                 .app_data_dir()
                 .map_err(|e| format!("Could not resolve app data directory: {}", e))?;
-            images::rename_event_folder(&app_dir, event_id, &old_name, &input.name)?;
+            media::rename_event_folder(&app_dir, event_id, &old_name, &input.name)?;
         }
     }
 
@@ -194,12 +207,16 @@ pub async fn update_event(
     .await
     .map_err(|e| e.to_string())?;
 
-    // Fetch metadata for any new artists in the background
-    let pool_clone = pool.inner().clone();
-    let app_clone = app_handle.clone();
-    tokio::spawn(async move {
-        let _ = genres::fetch_genres_bg(&pool_clone, &app_clone).await;
-    });
+    // Same policy as create_event: a rename, a date change, or a venue
+    // change shouldn't trigger a MusicBrainz sweep. Only spawn the fetch
+    // when the user's edit actually introduced new artist names.
+    if !new_artist_ids.is_empty() {
+        let pool_clone = pool.inner().clone();
+        let app_clone = app_handle.clone();
+        tokio::spawn(async move {
+            let _ = genres::fetch_genres_bg(&pool_clone, &app_clone, Some(new_artist_ids)).await;
+        });
+    }
 
     Ok(())
 }
@@ -243,7 +260,7 @@ pub async fn delete_event(
             .path()
             .app_data_dir()
             .map_err(|e| format!("Could not resolve app data directory: {}", e))?;
-        images::remove_event_folder(&app_dir, event_id, &name);
+        media::remove_event_folder(&app_dir, event_id, &name);
     }
 
     Ok(())

@@ -83,10 +83,69 @@ pub async fn find_venues_by_name(
         .await
 }
 
+/// Same as `find_venues_by_name` but includes the city/state of each hit.
+/// Used by the CSV preview so conflict messages can tell the user which
+/// existing location claims the venue name without an extra round-trip.
+pub async fn find_venues_with_location_by_name(
+    pool: &SqlitePool,
+    name: &str,
+) -> Result<Vec<(i64, i64, String, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT v.id, v.location_id, l.city, l.state \
+         FROM venues v JOIN locations l ON l.id = v.location_id \
+         WHERE v.name = ?1",
+    )
+    .bind(name)
+    .fetch_all(pool)
+    .await
+}
+
+/// Read-only counterpart to `find_or_create_location`. Returns the existing
+/// location id or `None` without inserting anything — used by the CSV
+/// preview to classify rows without side effects.
+pub async fn find_location(
+    pool: &SqlitePool,
+    city: &str,
+    state: &str,
+) -> Result<Option<i64>, sqlx::Error> {
+    let row: Option<(i64,)> =
+        sqlx::query_as("SELECT id FROM locations WHERE city = ?1 AND state = ?2")
+            .bind(city)
+            .bind(state)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|(id,)| id))
+}
+
+/// Does an event with this name/date/venue already exist? Used by preview
+/// (before insert) and by the import loop (skip duplicates at write time).
+pub async fn event_exists(
+    pool: &SqlitePool,
+    name: &str,
+    date: &str,
+    venue_id: i64,
+) -> Result<bool, sqlx::Error> {
+    let row: Option<(i64,)> = sqlx::query_as(
+        "SELECT id FROM events WHERE name = ?1 AND date = ?2 AND venue_id = ?3",
+    )
+    .bind(name)
+    .bind(date)
+    .bind(venue_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
+/// Look up or create an artist by name. Returns the row id plus a
+/// `was_inserted` flag so callers can distinguish new artists from existing
+/// ones — used by `create_event` / `update_event` to scope the background
+/// MusicBrainz metadata fetch to only the artists actually introduced by
+/// this mutation, instead of re-scanning every un-matched artist in the DB
+/// on every event edit.
 pub async fn find_or_create_artist(
     pool: &SqlitePool,
     name: &str,
-) -> Result<i64, sqlx::Error> {
+) -> Result<(i64, bool), sqlx::Error> {
     let row: Option<(i64,)> =
         sqlx::query_as("SELECT id FROM artists WHERE name = ?1")
             .bind(name)
@@ -94,7 +153,7 @@ pub async fn find_or_create_artist(
             .await?;
 
     if let Some((id,)) = row {
-        return Ok(id);
+        return Ok((id, false));
     }
 
     let result = sqlx::query("INSERT INTO artists (name) VALUES (?1)")
@@ -102,7 +161,7 @@ pub async fn find_or_create_artist(
         .execute(pool)
         .await?;
 
-    Ok(result.last_insert_rowid())
+    Ok((result.last_insert_rowid(), true))
 }
 
 // ── Event CRUD ──
@@ -202,12 +261,41 @@ pub async fn delete_event(pool: &SqlitePool, event_id: i64) -> Result<(), sqlx::
 
 // ── Rename entities ──
 
-pub async fn rename_artist(pool: &SqlitePool, artist_id: i64, name: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE artists SET name = ?1 WHERE id = ?2")
-        .bind(name)
-        .bind(artist_id)
-        .execute(pool)
-        .await?;
+/// Rename an artist *and* wipe all MusicBrainz-derived fields in the same
+/// statement. Used by `rename_artist` so a typo fix ("Nein Inch Nails" →
+/// "Nine Inch Nails") invalidates the metadata tied to the old name, with
+/// `mbid` reset to NULL so the background refetch picks the row up. All
+/// clearable columns are listed explicitly — keep this list in sync with
+/// `clear_artist_metadata` and any future artist metadata migrations.
+pub async fn rename_artist_and_clear_metadata(
+    pool: &SqlitePool,
+    artist_id: i64,
+    name: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE artists SET \
+            name = ?1, \
+            mbid = NULL, \
+            genre = NULL, \
+            tags = NULL, \
+            country = NULL, \
+            artist_type = NULL, \
+            begin_year = NULL, \
+            end_year = NULL, \
+            active = NULL, \
+            disambiguation = NULL, \
+            link_spotify = NULL, \
+            link_instagram = NULL, \
+            link_youtube = NULL, \
+            link_soundcloud = NULL, \
+            link_bandcamp = NULL, \
+            link_website = NULL \
+         WHERE id = ?2",
+    )
+    .bind(name)
+    .bind(artist_id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 

@@ -46,14 +46,25 @@ pub fn event_folder_name(id: i64, name: &str) -> String {
     format!("{}-{}", slugify(name), id)
 }
 
-/// Absolute path to `<app_data_dir>/images`.
-pub fn images_root(app_data_dir: &Path) -> PathBuf {
-    app_data_dir.join("images")
+/// Absolute path to the media root for the current build. Release builds
+/// use `<app_data_dir>/media`; dev builds use `<app_data_dir>/media_dev`.
+///
+/// The split mirrors the DB-naming convention (`shows.db` vs
+/// `shows_dev.db`) so the two environments can't stomp on each other's
+/// uploads — before this, `media/` was shared and a `wipe_database` in
+/// release would also nuke anything dev had attached (and vice versa).
+pub fn media_root(app_data_dir: &Path) -> PathBuf {
+    let name = if cfg!(debug_assertions) {
+        "media_dev"
+    } else {
+        "media"
+    };
+    app_data_dir.join(name)
 }
 
-/// Absolute path to an event's image folder. Does not create the directory.
+/// Absolute path to an event's media folder. Does not create the directory.
 pub fn event_folder_path(app_data_dir: &Path, id: i64, name: &str) -> PathBuf {
-    images_root(app_data_dir).join(event_folder_name(id, name))
+    media_root(app_data_dir).join(event_folder_name(id, name))
 }
 
 #[cfg(test)]

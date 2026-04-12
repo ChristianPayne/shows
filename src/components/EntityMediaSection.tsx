@@ -1,28 +1,28 @@
 import { useEffect, useState } from "react";
-import { ImageGallery } from "@/components/ImageGallery";
+import { MediaGallery } from "@/components/MediaGallery";
 import * as api from "@/api";
-import type { EventImage } from "@/types";
+import type { EventMedia } from "@/types";
 
-interface EntityImagesSectionProps {
+interface EntityMediaSectionProps {
   // Events this entity (artist/venue/location) is attached to. The section
-  // joins their images into one gallery tagged with each image's event name.
+  // joins their media into one gallery tagged with each item's event name.
   eventIds: number[];
 }
 
-export function EntityImagesSection({ eventIds }: EntityImagesSectionProps) {
-  const [images, setImages] = useState<EventImage[]>([]);
+export function EntityMediaSection({ eventIds }: EntityMediaSectionProps) {
+  const [media, setMedia] = useState<EventMedia[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (eventIds.length === 0) {
-      setImages([]);
+      setMedia([]);
       setLoaded(true);
       return;
     }
     let cancelled = false;
-    api.getImagesForEvents(eventIds).then((next) => {
+    api.getMediaForEvents(eventIds).then((next) => {
       if (!cancelled) {
-        setImages(next);
+        setMedia(next);
         setLoaded(true);
       }
     });
@@ -31,14 +31,14 @@ export function EntityImagesSection({ eventIds }: EntityImagesSectionProps) {
     };
   }, [eventIds]);
 
-  if (!loaded || images.length === 0) return null;
+  if (!loaded || media.length === 0) return null;
 
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-        Photos from these events
+        Media from these events
       </h3>
-      <ImageGallery images={images} showEventCaption />
+      <MediaGallery media={media} showEventCaption />
     </div>
   );
 }

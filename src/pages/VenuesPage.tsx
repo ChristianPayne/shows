@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
-import { EntityImagesSection } from "@/components/EntityImagesSection";
+import { EntityMediaSection } from "@/components/EntityMediaSection";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -204,7 +204,7 @@ export function VenueDetailPage() {
         }}
       />
       <EventsTable events={events} />
-      <EntityImagesSection eventIds={events.map((e) => e.id)} />
+      <EntityMediaSection eventIds={events.map((e) => e.id)} />
     </div>
   );
 }

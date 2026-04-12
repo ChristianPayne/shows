@@ -13,7 +13,8 @@ import type {
   SetlistResult,
   ArtistLinks,
   MusicBrainzMatch,
-  EventImage,
+  EventMedia,
+  PreviewRow,
 } from "./types";
 
 // ── Events ──
@@ -101,6 +102,12 @@ export const getStats = () => invoke<Stats>("get_stats");
 export const importCsv = (csvContent: string) =>
   invoke<ImportResult>("import_csv", { csvContent });
 
+export const previewCsvImport = (csvContent: string) =>
+  invoke<PreviewRow[]>("preview_csv_import", { csvContent });
+
+export const importCsvFiltered = (csvContent: string, selectedIndices: number[]) =>
+  invoke<ImportResult>("import_csv_filtered", { csvContent, selectedIndices });
+
 export const exportCsv = (destination: string) =>
   invoke<void>("export_csv", { destination });
 
@@ -143,22 +150,22 @@ export const applyMusicBrainzMatch = (artistId: number, mbid: string) =>
 export const clearArtistMetadata = (artistId: number) =>
   invoke<void>("clear_artist_metadata", { artistId });
 
-// ── Images ──
+// ── Media (images + videos) ──
 
-export const getEventImages = (eventId: number) =>
-  invoke<EventImage[]>("get_event_images", { eventId });
+export const getEventMedia = (eventId: number) =>
+  invoke<EventMedia[]>("get_event_media", { eventId });
 
-export const getImagesForEvents = (eventIds: number[]) =>
-  invoke<EventImage[]>("get_images_for_events", { eventIds });
+export const getMediaForEvents = (eventIds: number[]) =>
+  invoke<EventMedia[]>("get_media_for_events", { eventIds });
 
-export const addEventImage = (eventId: number, sourcePath: string) =>
-  invoke<EventImage>("add_event_image", { eventId, sourcePath });
+export const addEventMedia = (eventId: number, sourcePath: string) =>
+  invoke<EventMedia>("add_event_media", { eventId, sourcePath });
 
-export const deleteEventImage = (imageId: number) =>
-  invoke<void>("delete_event_image", { imageId });
+export const deleteEventMedia = (mediaId: number) =>
+  invoke<void>("delete_event_media", { mediaId });
 
-export const updateEventImageCaption = (imageId: number, caption: string | null) =>
-  invoke<void>("update_event_image_caption", { imageId, caption });
+export const updateEventMediaCaption = (mediaId: number, caption: string | null) =>
+  invoke<void>("update_event_media_caption", { mediaId, caption });
 
 // ── Maintenance ──
 

@@ -141,6 +141,30 @@ export interface ImportResult {
   locations_created: number;
 }
 
+export interface ParsedRow {
+  row_index: number;
+  date: string | null;
+  end_date: string | null;
+  event_name: string;
+  venue_name: string;
+  city: string;
+  state: string;
+  /** Each inner list is one comma-separated CSV entry after b2b splitting. */
+  artist_groups: string[][];
+  parse_error: string | null;
+}
+
+export type PreviewStatus =
+  | { kind: "Ok" }
+  | { kind: "Duplicate" }
+  | { kind: "VenueConflict"; existing_location: string }
+  | { kind: "ParseError"; message: string };
+
+export interface PreviewRow {
+  row: ParsedRow;
+  status: PreviewStatus;
+}
+
 export interface SetlistSong {
   name: string;
   info: string | null;
@@ -165,7 +189,7 @@ export interface CreateEventInput {
   artists: ArtistEntry[];
 }
 
-export interface EventImage {
+export interface EventMedia {
   id: number;
   event_id: number;
   filename: string;
@@ -173,6 +197,11 @@ export interface EventImage {
   file_size: number;
   caption: string | null;
   created_at: string;
+  /** Capture timestamp from the file itself — EXIF DateTimeOriginal for
+   *  images, mvhd creation_time for MP4/MOV. `null` when the format carries
+   *  no embedded timestamp. Used for chronological sort; UI falls back to
+   *  created_at when it's null. */
+  captured_at: string | null;
   absolute_path: string;
   event_name: string | null;
   event_date: string | null;

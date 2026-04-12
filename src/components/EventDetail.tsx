@@ -4,16 +4,28 @@ import { EntityLink } from "@/components/EntityLink";
 import { BackButton } from "@/components/BackButton";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import { Badge } from "@/components/ui/badge";
-import { ImageGallery } from "@/components/ImageGallery";
-import { ImageUploadButton } from "@/components/ImageUploadButton";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { MediaGallery } from "@/components/MediaGallery";
+import { MediaUploadButton } from "@/components/MediaUploadButton";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
+import { ExternalLink, ChevronDown, ChevronUp, CheckSquare, Trash2, X } from "lucide-react";
 import * as api from "@/api";
 import type {
   EventDetail as EventDetailType,
   ArtistContextSet,
   SetlistResult,
-  EventImage,
+  EventMedia,
 } from "@/types";
 
 interface EventDetailProps {
@@ -167,7 +179,7 @@ export function EventDetailView({
         </div>
       </div>
 
-      <EventImagesSection eventId={event.id} />
+      <EventMediaSection eventId={event.id} />
     </div>
   );
 }
@@ -261,27 +273,44 @@ function ArtistCard({
   );
 }
 
-function EventImagesSection({ eventId }: { eventId: number }) {
-  const [images, setImages] = useState<EventImage[]>([]);
+function EventMediaSection({ eventId }: { eventId: number }) {
+  const [media, setMedia] = useState<EventMedia[]>([]);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const refresh = useCallback(async () => {
-    const next = await api.getEventImages(eventId);
-    setImages(next);
+    const next = await api.getEventMedia(eventId);
+    setMedia(next);
   }, [eventId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const handleDelete = async (imageId: number) => {
-    await api.deleteEventImage(imageId);
+  // Escape exits select mode — common pattern for modal-ish UI and cheaper
+  // than a dedicated cancel affordance when the mouse is already elsewhere.
+  useEffect(() => {
+    if (!selectMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectMode(false);
+        setSelectedIds(new Set());
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectMode]);
+
+  const handleDelete = async (mediaId: number) => {
+    await api.deleteEventMedia(mediaId);
     await refresh();
   };
 
   const handleDropFiles = async (paths: string[]) => {
     for (const path of paths) {
       try {
-        await api.addEventImage(eventId, path);
+        await api.addEventMedia(eventId, path);
       } catch {
         // Skip unreadable/unsupported files silently — the button path
         // surfaces errors; a drag-drop of 10 files shouldn't spam alerts.
@@ -290,18 +319,119 @@ function EventImagesSection({ eventId }: { eventId: number }) {
     await refresh();
   };
 
+  const toggleSelect = (mediaId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(mediaId)) next.delete(mediaId);
+      else next.add(mediaId);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      // Serial — the existing single-delete command is cheap and sqlite writes
+      // are already serialized behind the connection mutex. Parallelizing
+      // would only save a few ms and complicates error reporting.
+      for (const id of selectedIds) {
+        await api.deleteEventMedia(id);
+      }
+      await refresh();
+      exitSelectMode();
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const selectedCount = selectedIds.size;
+
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium text-muted-foreground">
-          Images{images.length > 0 ? ` (${images.length})` : ""}
+          Media{media.length > 0 ? ` (${media.length})` : ""}
+          {selectMode && selectedCount > 0 && (
+            <span className="ml-2 text-foreground">· {selectedCount} selected</span>
+          )}
         </h3>
-        <ImageUploadButton eventId={eventId} onUploaded={refresh} />
+        <div className="flex items-center gap-2">
+          {selectMode ? (
+            <>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={selectedCount === 0 || bulkDeleting}
+                    className="gap-2 border-destructive/25 text-destructive/80 hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {bulkDeleting ? "Deleting..." : `Delete${selectedCount > 0 ? ` (${selectedCount})` : ""}`}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Delete {selectedCount} {selectedCount === 1 ? "item" : "items"}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      The selected media will be permanently removed from this
+                      event. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleBulkDelete}>
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={exitSelectMode}
+                disabled={bulkDeleting}
+                className="gap-2"
+              >
+                <X className="h-4 w-4" />
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {media.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectMode(true)}
+                  className="gap-2"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  Select
+                </Button>
+              )}
+              <MediaUploadButton eventId={eventId} onUploaded={refresh} />
+            </>
+          )}
+        </div>
       </div>
-      <ImageGallery
-        images={images}
+      <MediaGallery
+        media={media}
         onDelete={handleDelete}
-        onDropFiles={handleDropFiles}
+        onDropFiles={selectMode ? undefined : handleDropFiles}
+        selectionMode={selectMode}
+        selectedIds={selectedIds}
+        onToggleSelect={toggleSelect}
       />
     </div>
   );

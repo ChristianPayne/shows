@@ -1,6 +1,7 @@
 use sqlx::SqlitePool;
 use tauri::State;
 
+use crate::commands::genres;
 use crate::db::models::{ArtistStats, ArtistWithCount, EventDetail, LocationWithCount, VenueWithCount};
 use crate::db::queries;
 
@@ -63,8 +64,33 @@ pub async fn get_artist_stats(pool: State<'_, SqlitePool>, artist_id: i64) -> Re
 }
 
 #[tauri::command]
-pub async fn rename_artist(pool: State<'_, SqlitePool>, artist_id: i64, name: String) -> Result<(), String> {
-    queries::rename_artist(&pool, artist_id, &name).await.map_err(|e| e.to_string())
+pub async fn rename_artist(
+    pool: State<'_, SqlitePool>,
+    app_handle: tauri::AppHandle,
+    artist_id: i64,
+    name: String,
+) -> Result<(), String> {
+    // A rename is usually a typo fix ("Nein Inch Nails" → "Nine Inch Nails")
+    // — in which case the metadata from the old name is wrong and needs to
+    // go. Clear every MusicBrainz-derived column and reset `mbid` to NULL
+    // so the background fetcher picks the row up for the new name on the
+    // refetch below. If a user intentionally renames to a correct alias
+    // and wants to preserve the existing MBID mapping, they can re-apply
+    // it via the match picker after — acceptable trade-off for fixing the
+    // common typo case automatically.
+    queries::rename_artist_and_clear_metadata(&pool, artist_id, &name)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Targeted refetch for just this one artist, using the scoped filter
+    // we added for create_event / update_event. No full-DB scan.
+    let pool_clone = pool.inner().clone();
+    let app_clone = app_handle.clone();
+    tokio::spawn(async move {
+        let _ = genres::fetch_genres_bg(&pool_clone, &app_clone, Some(vec![artist_id])).await;
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
