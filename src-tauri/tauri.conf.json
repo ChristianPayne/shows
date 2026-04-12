@@ -18,11 +18,13 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": ["default"]
     }
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -31,5 +33,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVDRkE4OUJCQ0YzODIyRDgKUldUWUlqalB1NG42N0lhSXYyc296VVBnK3QyS2NZZHFrSjg1Q3BlUkVQRUEyYk8xNXA0OGhNazkK",
+      "endpoints": [
+        "https://github.com/ChristianPayne/shows/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

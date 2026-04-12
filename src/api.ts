@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import type {
   EventDetail,
   EntityWithCount,
@@ -145,3 +145,24 @@ export const clearArtistMetadata = (artistId: number) =>
 // ── Maintenance ──
 
 export const wipeDatabase = () => invoke<void>("wipe_database");
+
+// ── Updater ──
+
+export type UpdateMetadata = {
+  version: string;
+  currentVersion: string;
+};
+
+export type DownloadEvent =
+  | { event: "Started"; data: { contentLength: number | null } }
+  | { event: "Progress"; data: { chunkLength: number } }
+  | { event: "Finished" };
+
+export const fetchUpdate = () =>
+  invoke<UpdateMetadata | null>("fetch_update");
+
+export const installUpdate = (onEvent: (e: DownloadEvent) => void) => {
+  const channel = new Channel<DownloadEvent>();
+  channel.onmessage = onEvent;
+  return invoke<void>("install_update", { onEvent: channel });
+};

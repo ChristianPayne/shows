@@ -1,5 +1,8 @@
 mod commands;
 mod db;
+mod updater;
+
+use std::sync::Mutex;
 
 use commands::{backup, entities, events, export, genres, import, links, maintenance, setlists, settings, stats};
 use tauri::Manager;
@@ -10,6 +13,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()
                 .expect("Failed to resolve app data directory");
@@ -21,6 +26,7 @@ pub fn run() {
                 .expect("Failed to initialize database");
 
             app.manage(pool);
+            app.manage(updater::PendingUpdate(Mutex::new(None)));
 
             Ok(())
         })
@@ -65,6 +71,8 @@ pub fn run() {
             maintenance::wipe_database,
             settings::get_setting,
             settings::set_setting,
+            updater::fetch_update,
+            updater::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

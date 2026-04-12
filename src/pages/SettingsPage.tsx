@@ -14,7 +14,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown, Music } from "lucide-react";
+import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown, Music, RefreshCcw } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { ACCENT_PRESETS } from "@/lib/accent";
 import * as api from "@/api";
@@ -27,6 +27,26 @@ interface SettingsPageProps {
 
 export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
   const [fetchingGenres, setFetchingGenres] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState("");
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateMsg("");
+    try {
+      const meta = await api.fetchUpdate();
+      if (meta) {
+        setUpdateMsg(
+          `Update available: v${meta.version} (current v${meta.currentVersion}). See the banner at the top of the window to install.`,
+        );
+      } else {
+        setUpdateMsg("You're on the latest version.");
+      }
+    } catch (err) {
+      setUpdateMsg(`Update check failed: ${err}`);
+    }
+    setCheckingUpdate(false);
+  };
 
   useEffect(() => {
     const unlisten = listen<{ done: boolean }>("genre-progress", (event) => {
@@ -300,6 +320,27 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
             </AlertDescription>
           </Alert>
         )}
+      </div>
+
+      <Separator />
+
+      {/* Updates */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Updates</h2>
+        <div className="rounded-lg border divide-y">
+          <button
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            disabled={checkingUpdate}
+            onClick={handleCheckUpdate}
+          >
+            <RefreshCcw className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="text-left">
+              <p className="font-medium">{checkingUpdate ? "Checking..." : "Check for Updates"}</p>
+              <p className="text-xs text-muted-foreground">Look for a newer published release on GitHub</p>
+            </div>
+          </button>
+        </div>
+        {updateMsg && <p className="text-sm text-muted-foreground">{updateMsg}</p>}
       </div>
 
       <Separator />

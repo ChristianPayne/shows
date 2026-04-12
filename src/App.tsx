@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { ScrollRestore } from "@/components/ScrollRestore";
 import { StatusBar } from "@/components/StatusBar";
 import { CommandPalette } from "@/components/CommandPalette";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { MemoryRouter, Routes, Route, NavLink, Navigate, useNavigate } from "react-router-dom";
 import { EventsListPage, EventDetailPage, EventEditPage, EventNewPage } from "@/pages/EventsPage";
 import { ArtistsListPage, ArtistDetailPage } from "@/pages/ArtistsPage";
@@ -82,6 +83,7 @@ function AppLayout() {
 
   return (
     <div className="flex flex-col h-screen">
+    <UpdateBanner />
     <div className="flex flex-1 min-h-0">
       <nav className="w-48 border-r bg-sidebar-background p-4 flex flex-col">
         <div className="flex items-center justify-between px-2 mb-4">
