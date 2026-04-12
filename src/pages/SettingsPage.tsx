@@ -14,7 +14,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown, Music, RefreshCcw } from "lucide-react";
+import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown, Music, RefreshCcw, Sun, Moon } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { ACCENT_PRESETS } from "@/lib/accent";
 import * as api from "@/api";
@@ -23,9 +23,11 @@ import type { ImportResult } from "@/types";
 interface SettingsPageProps {
   accentId: string;
   onAccentChange: (id: string) => void;
+  dark: boolean;
+  onToggleDark: () => void;
 }
 
-export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
+export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: SettingsPageProps) {
   const [fetchingGenres, setFetchingGenres] = useState(false);
   const [updateMsg, setUpdateMsg] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -160,6 +162,16 @@ export function SettingsPage({ accentId, onAccentChange }: SettingsPageProps) {
               <span className="text-xs">{preset.label}</span>
             </button>
           ))}
+          <button
+            onClick={onToggleDark}
+            className="flex flex-col items-center gap-1.5 rounded-lg p-2 transition-colors hover:bg-accent/50"
+            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            <div className="h-8 w-8 rounded-full border border-border flex items-center justify-center bg-background">
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </div>
+            <span className="text-xs">{dark ? "Light" : "Dark"}</span>
+          </button>
         </div>
       </div>
 

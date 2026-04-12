@@ -38,6 +38,20 @@ jobs:
       - name: Install frontend dependencies
         run: bun install
 
+      - name: Read release notes
+        id: notes
+        shell: bash
+        run: |
+          if [ -f RELEASE_NOTES.md ]; then
+            {
+              echo 'body<<RELEASE_NOTES_EOF'
+              cat RELEASE_NOTES.md
+              echo RELEASE_NOTES_EOF
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo 'body=See the assets to download and install this version.' >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,8 +60,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'shows ${{ github.ref_name }}'
-          releaseBody: |
-            See the assets to download and install this version.
-          releaseDraft: true
+          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

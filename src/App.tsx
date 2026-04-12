@@ -20,8 +20,6 @@ import {
   Building2,
   MapPin,
   Settings,
-  Sun,
-  Moon,
   LayoutDashboard,
   Plus,
 } from "lucide-react";
@@ -88,12 +86,13 @@ function AppLayout() {
       <nav className="w-48 border-r bg-sidebar-background p-4 flex flex-col">
         <div className="flex items-center justify-between px-2 mb-4">
           <h1 className="text-lg font-bold">Shows</h1>
-          <button
-            onClick={toggleDark}
+          <NavLink
+            to="/events/new"
             className="rounded-md p-1 text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+            aria-label="Add event"
           >
-            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
+            <Plus className="h-4 w-4" />
+          </NavLink>
         </div>
         <div className="flex flex-col gap-1">
           {NAV_ITEMS.map(({ to, label, icon, children }) => (
@@ -183,6 +182,8 @@ function AppLayout() {
                 applyAccent(id, dark);
                 api.setSetting("accent", id);
               }}
+              dark={dark}
+              onToggleDark={toggleDark}
             />
           } />
           <Route path="/" element={<StatsPage />} />

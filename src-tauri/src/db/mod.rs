@@ -3,7 +3,7 @@ pub mod queries;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 /// All migrations in order. Each runs exactly once.
@@ -179,7 +179,7 @@ async fn find_or_create_artist_raw(pool: &SqlitePool, name: &str) -> Result<i64,
 }
 
 /// Get the path to the database file.
-pub fn db_path(app_data_dir: &PathBuf) -> PathBuf {
+pub fn db_path(app_data_dir: &Path) -> PathBuf {
     let db_name = if cfg!(debug_assertions) { "shows_dev.db" } else { "shows.db" };
     app_data_dir.join(db_name)
 }

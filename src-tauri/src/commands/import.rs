@@ -195,7 +195,7 @@ fn parse_date(raw: &str) -> Result<String, String> {
     let day: u32 = parts[1].parse().map_err(|_| "Invalid day")?;
     let year: u32 = parts[2].parse().map_err(|_| "Invalid year")?;
 
-    if month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || year < 1900 {
         return Err("Date values out of range".to_string());
     }
 

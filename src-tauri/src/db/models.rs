@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+// Canonical row shapes that mirror the SQLite schema 1:1. Currently unused —
+// the codebase prefers join-aware variants like EventDetail and EntityWithCount —
+// but kept as the source of truth for what each table looks like, and so
+// future queries can `query_as::<_, Location>` etc. without redefining.
+
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Location {
     pub id: i64,
@@ -8,6 +14,7 @@ pub struct Location {
     pub created_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Venue {
     pub id: i64,
@@ -15,6 +22,7 @@ pub struct Venue {
     pub created_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Artist {
     pub id: i64,
@@ -22,6 +30,7 @@ pub struct Artist {
     pub created_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Event {
     pub id: i64,

@@ -2,6 +2,21 @@ use sqlx::SqlitePool;
 
 use super::models::*;
 
+/// Raw row shape returned by the artist metadata query — kept as a type alias
+/// because spelling it out inline trips clippy::type_complexity, and the column
+/// list is awkward to map to a struct since it's purely a tuple decoded from
+/// `query_as`.
+type ArtistMetaRow = (
+    Option<String>, // genre
+    Option<String>, // tags
+    Option<String>, // country
+    Option<String>, // artist_type
+    Option<String>, // begin_year
+    Option<String>, // end_year
+    Option<bool>,   // active
+    Option<String>, // disambiguation
+);
+
 // ── Find-or-create operations ──
 
 pub async fn find_or_create_location(
@@ -110,24 +125,30 @@ pub async fn create_event(
     Ok(event_id)
 }
 
+/// Borrowed bundle of the fields needed to update an event. Lives here (not in
+/// models) because it's purely a query-layer input shape, never serialized.
+pub struct UpdateEventInput<'a> {
+    pub name: &'a str,
+    pub date: &'a str,
+    pub end_date: Option<&'a str>,
+    pub venue_id: i64,
+    pub location_id: i64,
+    pub artists: &'a [(i64, Option<i64>)],
+}
+
 pub async fn update_event(
     pool: &SqlitePool,
     event_id: i64,
-    name: &str,
-    date: &str,
-    end_date: Option<&str>,
-    venue_id: i64,
-    location_id: i64,
-    artists: &[(i64, Option<i64>)],
+    input: UpdateEventInput<'_>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "UPDATE events SET name = ?1, date = ?2, end_date = ?3, venue_id = ?4, location_id = ?5, updated_at = datetime('now') WHERE id = ?6",
     )
-    .bind(name)
-    .bind(date)
-    .bind(end_date)
-    .bind(venue_id)
-    .bind(location_id)
+    .bind(input.name)
+    .bind(input.date)
+    .bind(input.end_date)
+    .bind(input.venue_id)
+    .bind(input.location_id)
     .bind(event_id)
     .execute(pool)
     .await?;
@@ -138,7 +159,7 @@ pub async fn update_event(
         .execute(pool)
         .await?;
 
-    for (artist_id, set_group) in artists {
+    for (artist_id, set_group) in input.artists {
         sqlx::query("INSERT INTO event_artists (event_id, artist_id, set_group) VALUES (?1, ?2, ?3)")
             .bind(event_id)
             .bind(artist_id)
@@ -287,7 +308,7 @@ pub async fn delete_location(pool: &SqlitePool, location_id: i64) -> Result<(), 
 
 pub async fn get_artist_stats(pool: &SqlitePool, artist_id: i64) -> Result<ArtistStats, sqlx::Error> {
     // Artist metadata from MusicBrainz
-    let meta: Option<(Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<bool>, Option<String>)> = sqlx::query_as(
+    let meta: Option<ArtistMetaRow> = sqlx::query_as(
         "SELECT genre, tags, country, artist_type, begin_year, end_year, active, disambiguation FROM artists WHERE id = ?1"
     )
     .bind(artist_id)

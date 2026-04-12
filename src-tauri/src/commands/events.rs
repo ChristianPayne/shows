@@ -159,9 +159,20 @@ pub async fn update_event(
         }
     }
 
-    queries::update_event(&pool, event_id, &input.name, &input.date, input.end_date.as_deref(), venue_id, location_id, &artists)
-        .await
-        .map_err(|e| e.to_string())?;
+    queries::update_event(
+        &pool,
+        event_id,
+        queries::UpdateEventInput {
+            name: &input.name,
+            date: &input.date,
+            end_date: input.end_date.as_deref(),
+            venue_id,
+            location_id,
+            artists: &artists,
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     // Fetch metadata for any new artists in the background
     let pool_clone = pool.inner().clone();
