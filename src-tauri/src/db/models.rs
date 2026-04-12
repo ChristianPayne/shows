@@ -163,6 +163,20 @@ pub struct Stats {
     pub top_venues: Vec<EntityCount>,
     pub events_per_year: Vec<YearCount>,
     pub events_per_month: Vec<MonthCount>,
+    /// Aggregated from `artists.tags` (MusicBrainz tag lists), counted by
+    /// distinct attended events per tag. Can be empty when no artists have
+    /// had their metadata fetched yet — the UI surfaces a hint pointing at
+    /// the Settings "Fetch all" action in that case.
+    pub top_genres: Vec<GenreCount>,
+}
+
+/// A single row for the Top Genres radar chart. Genres don't have DB ids
+/// — they're derived from comma-split `artists.tags` values — so this uses
+/// a dedicated struct instead of piggy-backing on `EntityCount`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenreCount {
+    pub name: String,
+    pub count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

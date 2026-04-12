@@ -115,6 +115,12 @@ export interface Stats {
   top_venues: EntityCount[];
   events_per_year: YearCount[];
   events_per_month: MonthCount[];
+  top_genres: GenreCount[];
+}
+
+export interface GenreCount {
+  name: string;
+  count: number;
 }
 
 export interface EntityCount {

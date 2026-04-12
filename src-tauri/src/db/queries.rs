@@ -960,6 +960,8 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
     .fetch_all(pool)
     .await?;
 
+    let top_genres = top_genres_from_tags(pool).await?;
+
     Ok(Stats {
         total_events,
         total_artists,
@@ -969,5 +971,88 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
         top_venues,
         events_per_year,
         events_per_month,
+        top_genres,
     })
+}
+
+/// Aggregate the Top Genres radar data from the MusicBrainz tag lists
+/// stored in `artists.tags`. Each tag on an artist contributes the full
+/// set of attended events that artist played at. Tags are counted by
+/// **distinct event ids** so a festival with five indie bands still only
+/// counts once for "indie", not five times.
+///
+/// The tag column is stored as a comma-separated string — SQLite can't
+/// split comma-joined columns without `json_each` or a recursive CTE, so
+/// the split happens in Rust. We join events → event_artists → artists
+/// once with a single SQL query, then build a `HashMap<tag, HashSet<event_id>>`
+/// in memory. For a personal-tracker-scale DB (hundreds to a few
+/// thousand events), this is cheap and keeps the query itself simple.
+async fn top_genres_from_tags(pool: &SqlitePool) -> Result<Vec<GenreCount>, sqlx::Error> {
+    let rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT DISTINCT e.id, a.tags
+         FROM events e
+         JOIN event_artists ea ON ea.event_id = e.id
+         JOIN artists a ON a.id = ea.artist_id
+         WHERE a.tags IS NOT NULL AND a.tags != ''
+           AND e.cancelled = 0 AND e.date <= date('now')",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut buckets: std::collections::HashMap<String, std::collections::HashSet<i64>> =
+        std::collections::HashMap::new();
+
+    for (event_id, tags_csv) in rows {
+        for raw in tags_csv.split(',') {
+            let tag = raw.trim();
+            if tag.is_empty() {
+                continue;
+            }
+            // Normalize case so "Hip Hop" and "hip hop" collapse into one
+            // bucket. Display uses the first-seen spelling below.
+            let key = tag.to_lowercase();
+            buckets
+                .entry(key)
+                .or_default()
+                .insert(event_id);
+        }
+    }
+
+    // Now materialize with a display name. Re-scan the rows' tags once more
+    // so we use the original casing from the first occurrence of each
+    // lowercased key — stable and cheap for a few dozen buckets.
+    let mut display: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    let rescan: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT tags FROM artists \
+         WHERE tags IS NOT NULL AND tags != ''",
+    )
+    .fetch_all(pool)
+    .await?;
+    for (tags_csv,) in rescan {
+        for raw in tags_csv.split(',') {
+            let tag = raw.trim();
+            if tag.is_empty() {
+                continue;
+            }
+            display
+                .entry(tag.to_lowercase())
+                .or_insert_with(|| tag.to_string());
+        }
+    }
+
+    let mut counts: Vec<GenreCount> = buckets
+        .into_iter()
+        .map(|(key, set)| GenreCount {
+            name: display.remove(&key).unwrap_or(key),
+            count: set.len() as i64,
+        })
+        .collect();
+
+    // Sort by event count descending, break ties alphabetically so the
+    // radar order is stable across renders.
+    counts.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+    counts.truncate(8);
+
+    Ok(counts)
 }

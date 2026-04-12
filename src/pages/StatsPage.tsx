@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { GenresRadar } from "@/components/GenresRadar";
 import * as api from "@/api";
 import type { Stats, EventDetail } from "@/types";
 
@@ -175,6 +176,13 @@ export function StatsPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      <Separator />
+
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Top Genres</h2>
+        <GenresRadar genres={stats.top_genres} />
       </div>
     </div>
   );
