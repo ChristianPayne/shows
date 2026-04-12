@@ -38,7 +38,39 @@ pub async fn backup_database(
     }
 
     let dest_path = PathBuf::from(&destination);
-    let dest_file = File::create(&dest_path)
+
+    // Write to a sibling `.part` file and rename on success. Same-filesystem
+    // rename is atomic, so the final path never exists in a half-written
+    // state — without this, the user can spot the in-progress zip in Finder
+    // and try to open it before `zip.finish()` writes the central directory.
+    let part_path = {
+        let mut name = dest_path
+            .file_name()
+            .map(|n| n.to_os_string())
+            .unwrap_or_default();
+        name.push(".part");
+        dest_path.with_file_name(name)
+    };
+
+    if part_path.exists() {
+        let _ = std::fs::remove_file(&part_path);
+    }
+
+    if let Err(e) = write_backup_zip(&part_path, &db_source, &app_data_dir) {
+        let _ = std::fs::remove_file(&part_path);
+        return Err(e);
+    }
+
+    if let Err(e) = std::fs::rename(&part_path, &dest_path) {
+        let _ = std::fs::remove_file(&part_path);
+        return Err(format!("Failed to finalize backup file: {}", e));
+    }
+
+    Ok(destination)
+}
+
+fn write_backup_zip(part_path: &Path, db_source: &Path, app_data_dir: &Path) -> Result<(), String> {
+    let dest_file = File::create(part_path)
         .map_err(|e| format!("Failed to create backup file: {}", e))?;
 
     let mut zip = ZipWriter::new(dest_file);
@@ -47,16 +79,14 @@ pub async fn backup_database(
     // reasonable and preserves a single cross-platform decoder path.
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
 
-    // Add the database
     zip.start_file(DB_ENTRY, options)
         .map_err(|e| format!("Failed to start DB entry: {}", e))?;
-    let db_bytes = std::fs::read(&db_source)
+    let db_bytes = std::fs::read(db_source)
         .map_err(|e| format!("Failed to read database file: {}", e))?;
     zip.write_all(&db_bytes)
         .map_err(|e| format!("Failed to write database to zip: {}", e))?;
 
-    // Add every media file under media/ preserving relative structure.
-    let root = media_root(&app_data_dir);
+    let root = media_root(app_data_dir);
     if root.exists() {
         add_dir_recursive(&mut zip, &root, &root, options)?;
     }
@@ -64,7 +94,7 @@ pub async fn backup_database(
     zip.finish()
         .map_err(|e| format!("Failed to finalize backup zip: {}", e))?;
 
-    Ok(destination)
+    Ok(())
 }
 
 /// Walk `dir` recursively, adding every file into the zip with a path

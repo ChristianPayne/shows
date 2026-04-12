@@ -74,9 +74,11 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
   // feed the same bytes to import_csv_filtered that were parsed for preview —
   // guarantees the row_index numbers still line up.
   const [previewCsv, setPreviewCsv] = useState("");
-  const [backupMsg, setBackupMsg] = useState("");
-  const [exportMsg, setExportMsg] = useState("");
-  const [restoreMsg, setRestoreMsg] = useState("");
+  // One slot for export/backup/restore status — they share the same display
+  // line and are mutually exclusive in time, so a single message keeps the
+  // visible text in sync with the most recent action.
+  const [dataMsg, setDataMsg] = useState("");
+  const [backingUp, setBackingUp] = useState(false);
   const [wipeMsg, setWipeMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -133,7 +135,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
   };
 
   const handleBackup = async () => {
-    setBackupMsg("");
+    setDataMsg("");
     try {
       const now = new Date();
       const timestamp = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -146,15 +148,19 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
 
       if (!destination) return;
 
+      setBackingUp(true);
+      setDataMsg("Exporting backup… this can take a while if you have a lot of media.");
       await api.backupDatabase(destination);
-      setBackupMsg(`Backup saved to ${destination}`);
+      setDataMsg(`Backup saved to ${destination}`);
     } catch (err) {
-      setBackupMsg(`Backup failed: ${err}`);
+      setDataMsg(`Backup failed: ${err}`);
+    } finally {
+      setBackingUp(false);
     }
   };
 
   const handleRestore = async () => {
-    setRestoreMsg("");
+    setDataMsg("");
     try {
       // Accept both the new .zip bundle (DB + images) and the legacy raw .db
       // file from pre-v13 backups. The backend sniffs the header to decide
@@ -167,9 +173,9 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
       if (!selected) return;
 
       await api.restoreDatabase(selected);
-      setRestoreMsg("Database restored successfully. Restart the app to load the restored data.");
+      setDataMsg("Database restored successfully. Restart the app to load the restored data.");
     } catch (err) {
-      setRestoreMsg(`Restore failed: ${err}`);
+      setDataMsg(`Restore failed: ${err}`);
     }
   };
 
@@ -285,7 +291,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
           <button
             className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors"
             onClick={async () => {
-              setExportMsg("");
+              setDataMsg("");
               try {
                 const destination = await save({
                   defaultPath: `shows_export_${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.csv`,
@@ -293,9 +299,9 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
                 });
                 if (!destination) return;
                 await api.exportCsv(destination);
-                setExportMsg(`Exported to ${destination}`);
+                setDataMsg(`Exported to ${destination}`);
               } catch (err) {
-                setExportMsg(`Export failed: ${err}`);
+                setDataMsg(`Export failed: ${err}`);
               }
             }}
           >
@@ -336,20 +342,19 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
             </AlertDialogContent>
           </AlertDialog>
           <button
-            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors"
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:pointer-events-none"
             onClick={handleBackup}
+            disabled={backingUp}
           >
             <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="text-left">
-              <p className="font-medium">Export Backup</p>
+              <p className="font-medium">{backingUp ? "Exporting..." : "Export Backup"}</p>
               <p className="text-xs text-muted-foreground">Full database backup — includes all data, metadata, genres, links, and settings</p>
             </div>
           </button>
         </div>
-        {(exportMsg || backupMsg || restoreMsg) && (
-          <p className="text-sm text-muted-foreground">
-            {exportMsg || backupMsg || restoreMsg}
-          </p>
+        {dataMsg && (
+          <p className="text-sm text-muted-foreground">{dataMsg}</p>
         )}
         {importError && (
           <Alert variant="destructive">
