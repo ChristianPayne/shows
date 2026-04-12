@@ -31,6 +31,13 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
   const [fetchingGenres, setFetchingGenres] = useState(false);
   const [updateMsg, setUpdateMsg] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [setlistfmKey, setSetlistfmKey] = useState("");
+
+  useEffect(() => {
+    api.getSetting("setlistfm_api_key").then((value) => {
+      setSetlistfmKey(value ?? "");
+    });
+  }, []);
 
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
@@ -101,11 +108,11 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
     try {
       const now = new Date();
       const timestamp = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      const defaultName = `shows_backup_${timestamp}.db`;
+      const defaultName = `shows_backup_${timestamp}.zip`;
 
       const destination = await save({
         defaultPath: defaultName,
-        filters: [{ name: "SQLite Database", extensions: ["db"] }],
+        filters: [{ name: "Shows Backup", extensions: ["zip"] }],
       });
 
       if (!destination) return;
@@ -120,8 +127,11 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
   const handleRestore = async () => {
     setRestoreMsg("");
     try {
+      // Accept both the new .zip bundle (DB + images) and the legacy raw .db
+      // file from pre-v13 backups. The backend sniffs the header to decide
+      // which path to run.
       const selected = await open({
-        filters: [{ name: "SQLite Database", extensions: ["db"] }],
+        filters: [{ name: "Shows Backup", extensions: ["zip", "db"] }],
         multiple: false,
       });
 
@@ -189,11 +199,13 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
               id="setlistfm-key"
               type="password"
               placeholder="Enter setlist.fm API key"
-              defaultValue=""
+              value={setlistfmKey}
+              onChange={(e) => setSetlistfmKey(e.target.value)}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               onBlur={(e) => {
-                const val = e.target.value.trim();
-                if (val) api.setSetting("setlistfm_api_key", val);
+                // Persist whatever's in the field, including empty — clearing
+                // the input is the only way to remove a previously saved key.
+                api.setSetting("setlistfm_api_key", e.target.value.trim());
               }}
             />
           </div>

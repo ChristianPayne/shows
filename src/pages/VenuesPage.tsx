@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
+import { EntityImagesSection } from "@/components/EntityImagesSection";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -18,8 +19,8 @@ export function VenuesListPage() {
   const navigate = useNavigate();
   const [venues, setVenues] = useState<VenueWithCount[] | null>(null);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "count">("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortBy, setSortBy] = useState<"name" | "count">("count");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(new Map());
 
@@ -203,6 +204,7 @@ export function VenueDetailPage() {
         }}
       />
       <EventsTable events={events} />
+      <EntityImagesSection eventIds={events.map((e) => e.id)} />
     </div>
   );
 }

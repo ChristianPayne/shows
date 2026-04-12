@@ -1,9 +1,10 @@
 use sqlx::SqlitePool;
-use tauri::State;
+use tauri::{Manager, State};
 
-use crate::db::models::{EventDetail, ArtistContextSet};
-use crate::db::queries;
 use crate::commands::genres;
+use crate::commands::images;
+use crate::db::models::{ArtistContextSet, EventDetail};
+use crate::db::queries;
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct ArtistEntry {
@@ -159,6 +160,26 @@ pub async fn update_event(
         }
     }
 
+    // Keep the on-disk image folder in sync with the event name. We rename
+    // *before* touching the DB so a filesystem failure aborts the whole
+    // operation cleanly — doing it in the other order would let the DB move
+    // ahead while the folder stayed on the old slug.
+    let old_name: Option<(String,)> =
+        sqlx::query_as("SELECT name FROM events WHERE id = ?1")
+            .bind(event_id)
+            .fetch_optional(pool.inner())
+            .await
+            .map_err(|e| e.to_string())?;
+    if let Some((old_name,)) = old_name {
+        if old_name != input.name {
+            let app_dir = app_handle
+                .path()
+                .app_data_dir()
+                .map_err(|e| format!("Could not resolve app data directory: {}", e))?;
+            images::rename_event_folder(&app_dir, event_id, &old_name, &input.name)?;
+        }
+    }
+
     queries::update_event(
         &pool,
         event_id,
@@ -199,8 +220,31 @@ pub async fn set_event_cancelled(
 }
 
 #[tauri::command]
-pub async fn delete_event(pool: State<'_, SqlitePool>, event_id: i64) -> Result<(), String> {
+pub async fn delete_event(
+    pool: State<'_, SqlitePool>,
+    app_handle: tauri::AppHandle,
+    event_id: i64,
+) -> Result<(), String> {
+    // Grab the name *before* deleting so we can compute the folder path after
+    // the row is gone. If the event doesn't exist, fall through to the delete
+    // (it will no-op) and skip the folder cleanup.
+    let name: Option<(String,)> = sqlx::query_as("SELECT name FROM events WHERE id = ?1")
+        .bind(event_id)
+        .fetch_optional(pool.inner())
+        .await
+        .map_err(|e| e.to_string())?;
+
     queries::delete_event(&pool, event_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some((name,)) = name {
+        let app_dir = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Could not resolve app data directory: {}", e))?;
+        images::remove_event_folder(&app_dir, event_id, &name);
+    }
+
+    Ok(())
 }

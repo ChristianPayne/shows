@@ -1,10 +1,11 @@
 mod commands;
 mod db;
 mod updater;
+mod util;
 
 use std::sync::Mutex;
 
-use commands::{backup, entities, events, export, genres, import, links, maintenance, setlists, settings, stats};
+use commands::{backup, entities, events, export, genres, images, import, links, maintenance, setlists, settings, stats};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -68,6 +69,11 @@ pub fn run() {
             links::get_artist_links,
             genres::search_musicbrainz,
             genres::apply_musicbrainz_match,
+            images::add_event_image,
+            images::get_event_images,
+            images::get_images_for_events,
+            images::delete_event_image,
+            images::update_event_image_caption,
             maintenance::wipe_database,
             maintenance::get_db_version,
             settings::get_setting,

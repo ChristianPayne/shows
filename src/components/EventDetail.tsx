@@ -1,13 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { EntityLink } from "@/components/EntityLink";
 import { BackButton } from "@/components/BackButton";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import { Badge } from "@/components/ui/badge";
+import { ImageGallery } from "@/components/ImageGallery";
+import { ImageUploadButton } from "@/components/ImageUploadButton";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import * as api from "@/api";
-import type { EventDetail as EventDetailType, ArtistContextSet, SetlistResult } from "@/types";
+import type {
+  EventDetail as EventDetailType,
+  ArtistContextSet,
+  SetlistResult,
+  EventImage,
+} from "@/types";
 
 interface EventDetailProps {
   event: EventDetailType;
@@ -159,6 +166,8 @@ export function EventDetailView({
           })}
         </div>
       </div>
+
+      <EventImagesSection eventId={event.id} />
     </div>
   );
 }
@@ -248,6 +257,52 @@ function ArtistCard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function EventImagesSection({ eventId }: { eventId: number }) {
+  const [images, setImages] = useState<EventImage[]>([]);
+
+  const refresh = useCallback(async () => {
+    const next = await api.getEventImages(eventId);
+    setImages(next);
+  }, [eventId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const handleDelete = async (imageId: number) => {
+    await api.deleteEventImage(imageId);
+    await refresh();
+  };
+
+  const handleDropFiles = async (paths: string[]) => {
+    for (const path of paths) {
+      try {
+        await api.addEventImage(eventId, path);
+      } catch {
+        // Skip unreadable/unsupported files silently — the button path
+        // surfaces errors; a drag-drop of 10 files shouldn't spam alerts.
+      }
+    }
+    await refresh();
+  };
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-medium text-muted-foreground">
+          Images{images.length > 0 ? ` (${images.length})` : ""}
+        </h3>
+        <ImageUploadButton eventId={eventId} onUploaded={refresh} />
+      </div>
+      <ImageGallery
+        images={images}
+        onDelete={handleDelete}
+        onDropFiles={handleDropFiles}
+      />
     </div>
   );
 }

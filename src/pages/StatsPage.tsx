@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import * as api from "@/api";
@@ -11,6 +11,7 @@ const MONTH_NAMES = [
 ];
 
 export function StatsPage() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<Stats | null>(null);
   const [events, setEvents] = useState<EventDetail[]>([]);
 
@@ -73,7 +74,19 @@ export function StatsPage() {
                     <div className="mt-1 flex flex-wrap gap-1">
                       {event.artist_sets.flatMap((set) =>
                         set.artists.map((a) => (
-                          <Badge key={a.id} variant="outline" className="text-xs">{a.name}</Badge>
+                          <Badge
+                            key={a.id}
+                            variant="outline"
+                            className="text-xs cursor-pointer hover:bg-accent"
+                            role="link"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              navigate(`/artists/${a.id}`);
+                            }}
+                          >
+                            {a.name}
+                          </Badge>
                         ))
                       )}
                     </div>

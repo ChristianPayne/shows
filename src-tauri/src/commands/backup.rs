@@ -1,9 +1,24 @@
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::SqlitePool;
 use tauri::Manager;
+use zip::write::{SimpleFileOptions, ZipWriter};
+use zip::{CompressionMethod, ZipArchive};
 
 use crate::db;
+use crate::util::images_root;
+
+/// Name used for the database entry inside every zip backup. Restore looks
+/// for exactly this name, so don't change it without a format version bump.
+const DB_ENTRY: &str = "shows.db";
+
+/// Root prefix for image entries inside the zip. Matches the on-disk layout
+/// under the app data dir so restore can extract to `<app_data_dir>/images/`
+/// by stripping this prefix.
+const IMAGES_PREFIX: &str = "images/";
 
 #[tauri::command]
 pub async fn backup_database(
@@ -15,16 +30,74 @@ pub async fn backup_database(
         .app_data_dir()
         .map_err(|e| format!("Could not resolve app data directory: {}", e))?;
 
-    let source = db::db_path(&app_data_dir);
-
-    if !source.exists() {
+    let db_source = db::db_path(&app_data_dir);
+    if !db_source.exists() {
         return Err("Database file not found".to_string());
     }
 
     let dest_path = PathBuf::from(&destination);
-    std::fs::copy(&source, &dest_path).map_err(|e| format!("Failed to copy database: {}", e))?;
+    let dest_file = File::create(&dest_path)
+        .map_err(|e| format!("Failed to create backup file: {}", e))?;
+
+    let mut zip = ZipWriter::new(dest_file);
+    // Deflate is the safe default — Stored would skip compression (fine for
+    // already-compressed JPEG/PNG but would bloat the DB). Deflate keeps both
+    // reasonable and preserves a single cross-platform decoder path.
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    // Add the database
+    zip.start_file(DB_ENTRY, options)
+        .map_err(|e| format!("Failed to start DB entry: {}", e))?;
+    let db_bytes = std::fs::read(&db_source)
+        .map_err(|e| format!("Failed to read database file: {}", e))?;
+    zip.write_all(&db_bytes)
+        .map_err(|e| format!("Failed to write database to zip: {}", e))?;
+
+    // Add every image under images/ preserving relative structure.
+    let img_root = images_root(&app_data_dir);
+    if img_root.exists() {
+        add_dir_recursive(&mut zip, &img_root, &img_root, options)?;
+    }
+
+    zip.finish()
+        .map_err(|e| format!("Failed to finalize backup zip: {}", e))?;
 
     Ok(destination)
+}
+
+/// Walk `dir` recursively, adding every file into the zip with a path
+/// relative to `root`, prefixed with `images/` so the archive mirrors the
+/// on-disk layout.
+fn add_dir_recursive(
+    zip: &mut ZipWriter<File>,
+    root: &Path,
+    dir: &Path,
+    options: SimpleFileOptions,
+) -> Result<(), String> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read {}: {}", dir.display(), e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read dir entry: {}", e))?;
+        let path = entry.path();
+        if path.is_dir() {
+            add_dir_recursive(zip, root, &path, options)?;
+            continue;
+        }
+
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|e| format!("Path strip failed: {}", e))?;
+        let name = format!("{}{}", IMAGES_PREFIX, rel.to_string_lossy().replace('\\', "/"));
+
+        zip.start_file(&name, options)
+            .map_err(|e| format!("Failed to start entry {}: {}", name, e))?;
+        let bytes =
+            std::fs::read(&path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+        zip.write_all(&bytes)
+            .map_err(|e| format!("Failed to write entry {}: {}", name, e))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -37,26 +110,158 @@ pub async fn restore_database(
         .app_data_dir()
         .map_err(|e| format!("Could not resolve app data directory: {}", e))?;
 
-    let dest = db::db_path(&app_data_dir);
     let source_path = PathBuf::from(&source);
-
     if !source_path.exists() {
         return Err("Backup file not found".to_string());
     }
 
-    // Verify the source is a valid SQLite database by checking the header
-    let header = std::fs::read(&source_path)
-        .map_err(|e| format!("Failed to read backup file: {}", e))?;
-
-    if header.len() < 16 || &header[..16] != b"SQLite format 3\0" {
-        return Err("Selected file is not a valid SQLite database".to_string());
+    // Peek the first 4 bytes to decide which restore path to run. SQLite files
+    // begin with `SQLite format 3\0`, zip files begin with `PK\x03\x04`.
+    let mut header = [0u8; 4];
+    {
+        let mut f = File::open(&source_path)
+            .map_err(|e| format!("Failed to open backup file: {}", e))?;
+        let _ = f.read(&mut header);
     }
 
-    // Refuse to restore a backup created by a newer version of the app. The
-    // migration runner only rolls forward, so a v13 backup restored on a v12
-    // app would leave the database in a state the app can't read — and there's
-    // no recovery path short of reinstalling the newer app version.
-    let backup_version = read_backup_schema_version(&source_path).await?;
+    if &header == b"PK\x03\x04" {
+        restore_from_zip(&app_data_dir, &source_path).await
+    } else if header.starts_with(b"SQLi") {
+        restore_legacy_db(&app_data_dir, &source_path).await
+    } else {
+        Err("Selected file is not a valid backup (expected .zip or .db)".to_string())
+    }
+}
+
+/// Legacy path: raw .db file from before image backups existed. Replace only
+/// the database; any images on disk are left in place (they may be orphaned
+/// if the legacy DB doesn't have the rows, which is the intentional trade-off
+/// for preserving backwards compatibility).
+async fn restore_legacy_db(app_data_dir: &Path, source_path: &Path) -> Result<(), String> {
+    let dest = db::db_path(app_data_dir);
+
+    let backup_version = read_backup_schema_version(source_path).await?;
+    guard_against_newer(backup_version)?;
+
+    std::fs::copy(source_path, &dest)
+        .map_err(|e| format!("Failed to restore database: {}", e))?;
+    Ok(())
+}
+
+async fn restore_from_zip(app_data_dir: &Path, source_path: &Path) -> Result<(), String> {
+    let file =
+        File::open(source_path).map_err(|e| format!("Failed to open backup zip: {}", e))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|e| format!("Failed to read backup zip: {}", e))?;
+
+    // Extract the DB to a temp location first so we can run the schema guard
+    // against it before touching the real file.
+    let tmp_dir = std::env::temp_dir().join(format!("shows-restore-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    let tmp_db = tmp_dir.join("shows.db");
+
+    {
+        let mut db_entry = archive
+            .by_name(DB_ENTRY)
+            .map_err(|_| format!("Backup zip missing {}", DB_ENTRY))?;
+        let mut out = File::create(&tmp_db)
+            .map_err(|e| format!("Failed to write temp DB: {}", e))?;
+        std::io::copy(&mut db_entry, &mut out)
+            .map_err(|e| format!("Failed to extract DB: {}", e))?;
+    }
+
+    let backup_version = read_backup_schema_version(&tmp_db).await?;
+    if let Err(e) = guard_against_newer(backup_version) {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(e);
+    }
+
+    // Swap the database first. If anything below fails, the user at least
+    // has the new DB — images are secondary to data integrity.
+    let dest_db = db::db_path(app_data_dir);
+    std::fs::copy(&tmp_db, &dest_db)
+        .map_err(|e| format!("Failed to install restored DB: {}", e))?;
+
+    // Now swap the images directory. Rename-old → extract-new → delete-old,
+    // with a rollback to the stashed directory if extraction fails.
+    let img_dest = images_root(app_data_dir);
+    let stash = app_data_dir.join("images.old");
+    if stash.exists() {
+        let _ = std::fs::remove_dir_all(&stash);
+    }
+    if img_dest.exists() {
+        std::fs::rename(&img_dest, &stash)
+            .map_err(|e| format!("Failed to stash existing images: {}", e))?;
+    }
+
+    std::fs::create_dir_all(&img_dest)
+        .map_err(|e| format!("Failed to create images dir: {}", e))?;
+
+    let extract_result = extract_images(&mut archive, &img_dest);
+    match extract_result {
+        Ok(_) => {
+            if stash.exists() {
+                let _ = std::fs::remove_dir_all(&stash);
+            }
+        }
+        Err(e) => {
+            // Roll back: drop the half-extracted tree and put the stash back.
+            let _ = std::fs::remove_dir_all(&img_dest);
+            if stash.exists() {
+                let _ = std::fs::rename(&stash, &img_dest);
+            }
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return Err(e);
+        }
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    Ok(())
+}
+
+/// Extract every `images/...` entry from the archive into `dest`. Entries
+/// outside the `images/` prefix are ignored — the only other expected entry
+/// is `shows.db`, which the caller has already handled.
+fn extract_images(archive: &mut ZipArchive<File>, dest: &Path) -> Result<(), String> {
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
+        let name = entry.name().to_string();
+        if !name.starts_with(IMAGES_PREFIX) {
+            continue;
+        }
+        let rel = &name[IMAGES_PREFIX.len()..];
+        if rel.is_empty() {
+            continue;
+        }
+        // Guard against path traversal — reject entries with `..` segments.
+        if rel.split('/').any(|seg| seg == ".." || seg.is_empty()) {
+            return Err(format!("Unsafe path in backup: {}", name));
+        }
+        let target = dest.join(rel);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&target)
+                .map_err(|e| format!("Failed to create dir {}: {}", target.display(), e))?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create dir {}: {}", parent.display(), e))?;
+        }
+        let mut out = File::create(&target)
+            .map_err(|e| format!("Failed to write {}: {}", target.display(), e))?;
+        std::io::copy(&mut entry, &mut out)
+            .map_err(|e| format!("Failed to extract {}: {}", name, e))?;
+    }
+    Ok(())
+}
+
+/// Refuse to restore a backup whose schema_version exceeds what this build
+/// knows. The migration runner only rolls forward, so accepting a newer-
+/// version DB would leave the app unable to read its own file on next launch.
+fn guard_against_newer(backup_version: i64) -> Result<(), String> {
     let current_max = db::max_schema_version();
     if backup_version > current_max {
         return Err(format!(
@@ -66,10 +271,6 @@ pub async fn restore_database(
             backup_version, current_max
         ));
     }
-
-    std::fs::copy(&source_path, &dest)
-        .map_err(|e| format!("Failed to restore database: {}", e))?;
-
     Ok(())
 }
 
@@ -77,18 +278,13 @@ pub async fn restore_database(
 /// Returns 0 if `schema_version` is missing or empty (a valid pre-migration
 /// state — restoration is allowed and the app's migration runner will catch
 /// it up on next launch).
-async fn read_backup_schema_version(path: &PathBuf) -> Result<i64, String> {
-    let options = SqliteConnectOptions::new()
-        .filename(path)
-        .read_only(true);
+async fn read_backup_schema_version(path: &Path) -> Result<i64, String> {
+    let options = SqliteConnectOptions::new().filename(path).read_only(true);
 
     let pool = SqlitePool::connect_with(options)
         .await
         .map_err(|e| format!("Could not open backup file: {}", e))?;
 
-    // schema_version may not exist if the backup pre-dates the migration
-    // tracking table. In practice every shows backup has it because init
-    // creates it before doing anything else, but be defensive.
     let result: Result<Option<i64>, sqlx::Error> =
         sqlx::query_scalar("SELECT MAX(version) FROM schema_version")
             .fetch_one(&pool)

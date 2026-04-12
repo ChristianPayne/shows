@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
+import { EntityImagesSection } from "@/components/EntityImagesSection";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -20,8 +21,8 @@ export function ArtistsListPage() {
   const navigate = useNavigate();
   const [artists, setArtists] = useState<ArtistWithCount[] | null>(null);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "count">("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortBy, setSortBy] = useState<"name" | "count">("count");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const [artistEvents, setArtistEvents] = useState<Map<number, string[]>>(new Map());
 
@@ -304,6 +305,8 @@ export function ArtistDetailPage() {
 
       {/* Events */}
       <EventsTable events={events} />
+
+      <EntityImagesSection eventIds={events.map((e) => e.id)} />
     </div>
   );
 }

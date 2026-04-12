@@ -164,3 +164,16 @@ export interface CreateEventInput {
   state: string;
   artists: ArtistEntry[];
 }
+
+export interface EventImage {
+  id: number;
+  event_id: number;
+  filename: string;
+  mime_type: string;
+  file_size: number;
+  caption: string | null;
+  created_at: string;
+  absolute_path: string;
+  event_name: string | null;
+  event_date: string | null;
+}

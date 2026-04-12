@@ -33,6 +33,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/011_add_setlist_cache.sql"),
     // v12: venues own their location; drop location_id from events
     "", // procedural migration — handled below
+    // v13: event_images table for per-event lineup/photo attachments
+    include_str!("../../migrations/013_event_images.sql"),
 ];
 
 /// Initialize the SQLite database, run pending migrations, and return the connection pool.

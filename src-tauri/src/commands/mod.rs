@@ -9,3 +9,4 @@ pub mod genres;
 pub mod links;
 pub mod setlists;
 pub mod settings;
+pub mod images;

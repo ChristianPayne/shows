@@ -13,6 +13,7 @@ import type {
   SetlistResult,
   ArtistLinks,
   MusicBrainzMatch,
+  EventImage,
 } from "./types";
 
 // ── Events ──
@@ -141,6 +142,23 @@ export const applyMusicBrainzMatch = (artistId: number, mbid: string) =>
 
 export const clearArtistMetadata = (artistId: number) =>
   invoke<void>("clear_artist_metadata", { artistId });
+
+// ── Images ──
+
+export const getEventImages = (eventId: number) =>
+  invoke<EventImage[]>("get_event_images", { eventId });
+
+export const getImagesForEvents = (eventIds: number[]) =>
+  invoke<EventImage[]>("get_images_for_events", { eventIds });
+
+export const addEventImage = (eventId: number, sourcePath: string) =>
+  invoke<EventImage>("add_event_image", { eventId, sourcePath });
+
+export const deleteEventImage = (imageId: number) =>
+  invoke<void>("delete_event_image", { imageId });
+
+export const updateEventImageCaption = (imageId: number, caption: string | null) =>
+  invoke<void>("update_event_image_caption", { imageId, caption });
 
 // ── Maintenance ──
 
