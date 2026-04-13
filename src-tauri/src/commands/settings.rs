@@ -1,6 +1,7 @@
 use sqlx::SqlitePool;
 use tauri::State;
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_setting(pool: State<'_, SqlitePool>, key: String) -> Result<Option<String>, String> {
     let row: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = ?1")
@@ -12,6 +13,7 @@ pub async fn get_setting(pool: State<'_, SqlitePool>, key: String) -> Result<Opt
     Ok(row.map(|(v,)| v))
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn set_setting(pool: State<'_, SqlitePool>, key: String, value: String) -> Result<(), String> {
     sqlx::query("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2")

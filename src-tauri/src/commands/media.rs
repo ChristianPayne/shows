@@ -73,6 +73,7 @@ fn build_event_media(
     }
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn add_event_media(
     pool: State<'_, SqlitePool>,
@@ -156,6 +157,7 @@ pub async fn add_event_media(
     Ok(build_event_media(row, &app_dir, &event_name, None, false))
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_event_media(
     pool: State<'_, SqlitePool>,
@@ -187,6 +189,7 @@ pub async fn get_event_media(
         .collect())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_media_for_events(
     pool: State<'_, SqlitePool>,
@@ -248,6 +251,7 @@ pub async fn get_media_for_events(
 /// order per-event galleries render internally. Intentionally unpaginated —
 /// a personal tracker with a few hundred items renders fine, and streaming
 /// adds complexity we don't need yet.
+#[specta::specta]
 #[tauri::command]
 pub async fn get_all_media(
     pool: State<'_, SqlitePool>,
@@ -288,6 +292,7 @@ pub async fn get_all_media(
 /// dramatically less traffic than shipping every media row to the frontend
 /// just to count them — and the classification rule (`video/*` mime) lives
 /// in exactly one place now.
+#[specta::specta]
 #[tauri::command]
 pub async fn get_media_counts(pool: State<'_, SqlitePool>) -> Result<MediaCounts, String> {
     queries::get_media_counts(&pool)
@@ -309,6 +314,7 @@ struct JoinedMediaRow {
     event_date: String,
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn delete_event_media(
     pool: State<'_, SqlitePool>,
@@ -353,6 +359,7 @@ pub async fn delete_event_media(
     Ok(())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn update_event_media_caption(
     pool: State<'_, SqlitePool>,

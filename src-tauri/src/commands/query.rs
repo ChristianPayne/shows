@@ -19,14 +19,14 @@ use crate::db::queries;
 
 // ── Shared shapes ─────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, serde::Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum SortDir {
     Asc,
     Desc,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, serde::Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum EventSortKey {
     Date,
@@ -39,7 +39,7 @@ pub enum EventSortKey {
 /// "natural" display name or the per-entity event count. The per-entity
 /// meaning of `Name` differs (venue strips "The ", locations compose
 /// "state, city"), but the enum variants line up.
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, serde::Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum EntitySortKey {
     Name,
@@ -78,12 +78,16 @@ fn apply_dir(cmp: std::cmp::Ordering, dir: SortDir) -> std::cmp::Ordering {
 
 // ── Events ────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct EventsQueryInput {
+    #[specta(optional)]
     pub query: Option<String>,
+    #[specta(optional)]
     pub sort_key: Option<EventSortKey>,
+    #[specta(optional)]
     pub sort_dir: Option<SortDir>,
+    #[specta(optional)]
     pub limit: Option<usize>,
 }
 
@@ -118,6 +122,7 @@ pub fn sort_events(events: &mut [EventDetail], key: EventSortKey, dir: SortDir) 
     });
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn query_events(
     pool: State<'_, SqlitePool>,
@@ -143,16 +148,21 @@ pub async fn query_events(
 
 // ── Artists ───────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistsQueryInput {
+    #[specta(optional)]
     pub query: Option<String>,
     /// Optional tag filter with OR semantics — an artist matches if *any*
     /// of its tags appears in this set. Callers may pass mixed-case values;
     /// we lowercase them here for the comparison.
+    #[specta(optional)]
     pub tags: Option<Vec<String>>,
+    #[specta(optional)]
     pub sort_key: Option<EntitySortKey>,
+    #[specta(optional)]
     pub sort_dir: Option<SortDir>,
+    #[specta(optional)]
     pub limit: Option<usize>,
 }
 
@@ -181,6 +191,7 @@ fn sort_artists(artists: &mut [ArtistWithCount], key: EntitySortKey, dir: SortDi
     });
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn query_artists(
     pool: State<'_, SqlitePool>,
@@ -212,12 +223,16 @@ pub async fn query_artists(
 
 // ── Venues ────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct VenuesQueryInput {
+    #[specta(optional)]
     pub query: Option<String>,
+    #[specta(optional)]
     pub sort_key: Option<EntitySortKey>,
+    #[specta(optional)]
     pub sort_dir: Option<SortDir>,
+    #[specta(optional)]
     pub limit: Option<usize>,
 }
 
@@ -239,6 +254,7 @@ fn sort_venues(venues: &mut [VenueWithCount], key: EntitySortKey, dir: SortDir) 
     });
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn query_venues(
     pool: State<'_, SqlitePool>,
@@ -264,12 +280,16 @@ pub async fn query_venues(
 
 // ── Locations ─────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LocationsQueryInput {
+    #[specta(optional)]
     pub query: Option<String>,
+    #[specta(optional)]
     pub sort_key: Option<EntitySortKey>,
+    #[specta(optional)]
     pub sort_dir: Option<SortDir>,
+    #[specta(optional)]
     pub limit: Option<usize>,
 }
 
@@ -294,6 +314,7 @@ fn sort_locations(locations: &mut [LocationWithCount], key: EntitySortKey, dir: 
     });
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn query_locations(
     pool: State<'_, SqlitePool>,

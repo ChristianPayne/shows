@@ -6,7 +6,7 @@ use tauri::State;
 use crate::db::queries;
 
 /// Result of a CSV import operation.
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, specta::Type)]
 pub struct ImportResult {
     pub events_created: usize,
     pub events_skipped: usize,
@@ -20,7 +20,7 @@ pub struct ImportResult {
 /// `parse_error` is populated when the row fails validation; rows with errors
 /// are still surfaced to the UI so the user can see what went wrong, but they
 /// can't be checked in the preview dialog.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 pub struct ParsedRow {
     pub row_index: usize,
     pub date: Option<String>,
@@ -41,7 +41,7 @@ pub struct ParsedRow {
 /// Per-row preview classification. `VenueConflict` carries the existing
 /// location so the UI can tell the user exactly which other city claims the
 /// venue name.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "kind")]
 pub enum PreviewStatus {
     Ok,
@@ -50,7 +50,7 @@ pub enum PreviewStatus {
     ParseError { message: String },
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 pub struct PreviewRow {
     pub row: ParsedRow,
     pub status: PreviewStatus,
@@ -60,6 +60,7 @@ pub struct PreviewRow {
 /// filtering. Now a thin wrapper over `run_import` so the write loop lives in
 /// one place. Kept so any external caller (or future bulk path) still has the
 /// "import everything" entry point.
+#[specta::specta]
 #[tauri::command]
 pub async fn import_csv(
     pool: State<'_, SqlitePool>,
@@ -73,6 +74,7 @@ pub async fn import_csv(
 /// Preview checks duplicates and venue conflicts against the live database
 /// so the user sees the same outcome they'd get on commit — minus races from
 /// concurrent writes, which are re-caught on the actual import.
+#[specta::specta]
 #[tauri::command]
 pub async fn preview_csv_import(
     pool: State<'_, SqlitePool>,
@@ -103,6 +105,7 @@ pub async fn preview_csv_import(
 /// `selected_indices`. Unselected rows are silently skipped (not counted as
 /// `events_skipped`; that counter is reserved for duplicates detected during
 /// the write).
+#[specta::specta]
 #[tauri::command]
 pub async fn import_csv_filtered(
     pool: State<'_, SqlitePool>,

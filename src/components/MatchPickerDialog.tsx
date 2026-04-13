@@ -7,8 +7,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
-import * as api from "@/api";
-import type { MusicBrainzMatch } from "@/types";
+import { commands } from "@/lib/commands";
+import type { MusicBrainzMatch } from "@/bindings";
 
 interface MatchPickerDialogProps {
   open: boolean;
@@ -35,7 +35,7 @@ export function MatchPickerDialog({
       setLoading(true);
       setMatches([]);
       setLimit(5);
-      api.searchMusicBrainz(artistName, 5).then((m) => {
+      commands.searchMusicbrainz(artistName, 5).then((m) => {
         setMatches(m);
         setLoading(false);
       });
@@ -45,7 +45,7 @@ export function MatchPickerDialog({
   const showMore = async () => {
     const newLimit = limit + 5;
     setLoading(true);
-    const m = await api.searchMusicBrainz(artistName, newLimit);
+    const m = await commands.searchMusicbrainz(artistName, newLimit);
     setMatches(m);
     setLimit(newLimit);
     setLoading(false);
@@ -53,7 +53,7 @@ export function MatchPickerDialog({
 
   const handleSelect = async (mbid: string) => {
     setApplying(mbid);
-    await api.applyMusicBrainzMatch(artistId, mbid);
+    await commands.applyMusicbrainzMatch(artistId, mbid);
     setApplying(null);
     onApplied();
     onClose();
@@ -114,7 +114,7 @@ export function MatchPickerDialog({
             className="flex items-center justify-center w-full rounded-lg border border-dashed p-3 text-sm text-muted-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
             onClick={async () => {
               setApplying("skip");
-              await api.clearArtistMetadata(artistId);
+              await commands.clearArtistMetadata(artistId);
               setApplying(null);
               onApplied();
               onClose();

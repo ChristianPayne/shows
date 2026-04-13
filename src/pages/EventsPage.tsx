@@ -5,13 +5,13 @@ import { EventsTable } from "@/components/EventsTable";
 import { EventDetailView } from "@/components/EventDetail";
 import { EventForm } from "@/components/EventForm";
 import { SkeletonTableRow } from "@/components/Skeleton";
-import * as api from "@/api";
+import { commands } from "@/lib/commands";
 import type {
   EventDetail,
   CreateEventInput,
   EventSortKey,
   SortDir,
-} from "@/types";
+} from "@/bindings";
 
 let lastEventCount = 0;
 
@@ -26,7 +26,7 @@ export function EventsListPage() {
     // column click re-queries the backend. Personal-scale data, so a full
     // round-trip per keystroke is fine and avoids any drift between the
     // two codebases about how matching / ordering should work.
-    api.queryEvents({ query: search, sortKey, sortDir }).then((data) => {
+    commands.queryEvents({ query: search, sortKey, sortDir }).then((data) => {
       lastEventCount = data.length;
       setEvents(data);
     });
@@ -77,7 +77,7 @@ export function EventDetailPage() {
     const eventId = Number(id);
     if (isNaN(eventId)) return;
 
-    api
+    commands
       .getEvent(eventId)
       .then((data) => setEvent(data))
       .catch((err) => console.error("Failed to load event:", err))
@@ -93,13 +93,13 @@ export function EventDetailPage() {
   }
 
   const handleDelete = async (eventId: number) => {
-    await api.deleteEvent(eventId);
+    await commands.deleteEvent(eventId);
 
     navigate("/events");
   };
 
   const handleToggleCancelled = async (eventId: number, cancelled: boolean) => {
-    await api.setEventCancelled(eventId, cancelled);
+    await commands.setEventCancelled(eventId, cancelled);
     setEvent({ ...event, cancelled });
 
   };
@@ -125,7 +125,7 @@ export function EventEditPage() {
     const eventId = Number(id);
     if (isNaN(eventId)) return;
 
-    api
+    commands
       .getEvent(eventId)
       .then((data) => setEvent(data))
       .catch((err) => console.error("Failed to load event:", err))
@@ -141,7 +141,7 @@ export function EventEditPage() {
   }
 
   const handleUpdate = async (input: CreateEventInput) => {
-    await api.updateEvent(event.id, input);
+    await commands.updateEvent(event.id, input);
 
     navigate(`/events/${event.id}`, { replace: true });
   };
@@ -159,7 +159,7 @@ export function EventNewPage() {
   const navigate = useNavigate();
 
   const handleCreate = async (input: CreateEventInput) => {
-    const newId = await api.createEvent(input);
+    const newId = await commands.createEvent(input);
 
     navigate(`/events/${newId}`);
   };

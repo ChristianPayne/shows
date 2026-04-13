@@ -19,8 +19,8 @@ import { save, open } from "@tauri-apps/plugin-dialog";
 import { ACCENT_PRESETS } from "@/lib/accent";
 import { CsvPreviewDialog } from "@/components/CsvPreviewDialog";
 import { useUpdater } from "@/hooks/useUpdater";
-import * as api from "@/api";
-import type { ImportResult, PreviewRow } from "@/types";
+import { commands } from "@/lib/commands";
+import type { ImportResult, PreviewRow } from "@/bindings";
 
 interface SettingsPageProps {
   accentId: string;
@@ -35,7 +35,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
   const [setlistfmKey, setSetlistfmKey] = useState("");
 
   useEffect(() => {
-    api.getSetting("setlistfm_api_key").then((value) => {
+    commands.getSetting("setlistfm_api_key").then((value) => {
       setSetlistfmKey(value ?? "");
     });
   }, []);
@@ -67,7 +67,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
   const handleWipe = async () => {
     setWipeMsg("");
     try {
-      await api.wipeDatabase();
+      await commands.wipeDatabase();
       setWipeMsg("All data has been deleted.");
     } catch (err) {
       setWipeMsg(`Wipe failed: ${err}`);
@@ -83,7 +83,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
 
     try {
       const text = await file.text();
-      const rows = await api.previewCsvImport(text);
+      const rows = await commands.previewCsvImport(text);
       setPreviewCsv(text);
       setPreviewRows(rows);
       setPreviewOpen(true);
@@ -101,7 +101,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
     setImportError("");
     setImportSuccess(null);
     try {
-      const result = await api.importCsvFiltered(previewCsv, selectedIndices);
+      const result = await commands.importCsvFiltered(previewCsv, selectedIndices);
       setImportSuccess(result);
       setPreviewOpen(false);
     } catch (err) {
@@ -132,7 +132,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
 
       setBackingUp(true);
       setDataMsg("Exporting backup… this can take a while if you have a lot of media.");
-      await api.backupDatabase(destination);
+      await commands.backupDatabase(destination);
       setDataMsg(`Backup saved to ${destination}`);
     } catch (err) {
       setDataMsg(`Backup failed: ${err}`);
@@ -154,7 +154,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
 
       if (!selected) return;
 
-      await api.restoreDatabase(selected);
+      await commands.restoreDatabase(selected);
       setDataMsg("Database restored successfully. Restart the app to load the restored data.");
     } catch (err) {
       setDataMsg(`Restore failed: ${err}`);
@@ -222,7 +222,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
               onBlur={(e) => {
                 // Persist whatever's in the field, including empty — clearing
                 // the input is the only way to remove a previously saved key.
-                api.setSetting("setlistfm_api_key", e.target.value.trim());
+                commands.setSetting("setlistfm_api_key", e.target.value.trim());
               }}
             />
           </div>
@@ -240,7 +240,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
           <button
             className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:pointer-events-none"
             disabled={fetchingGenres}
-            onClick={() => { setFetchingGenres(true); api.fetchGenres(); }}
+            onClick={() => { setFetchingGenres(true); commands.fetchGenres(); }}
           >
             <Music className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="text-left">
@@ -280,7 +280,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
                   filters: [{ name: "CSV", extensions: ["csv"] }],
                 });
                 if (!destination) return;
-                await api.exportCsv(destination);
+                await commands.exportCsv(destination);
                 setDataMsg(`Exported to ${destination}`);
               } catch (err) {
                 setDataMsg(`Export failed: ${err}`);

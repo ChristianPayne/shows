@@ -43,7 +43,7 @@ pub struct Event {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
 pub struct ArtistInfo {
     pub id: i64,
     pub name: String,
@@ -51,13 +51,13 @@ pub struct ArtistInfo {
 }
 
 /// A group of artists that perform together (b2b). Solo artists are a set of one.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ArtistSet {
     pub artists: Vec<ArtistInfo>,
 }
 
 /// Enriched artist info for event detail view — includes attendance context.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ArtistContext {
     pub id: i64,
     pub name: String,
@@ -67,13 +67,13 @@ pub struct ArtistContext {
     pub mbid: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ArtistContextSet {
     pub artists: Vec<ArtistContext>,
 }
 
 /// Event with all related data joined — used for list and detail views.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct EventDetail {
     pub id: i64,
     pub name: String,
@@ -128,7 +128,7 @@ pub struct EventRow {
 }
 
 /// Detailed stats for a single artist.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ArtistStats {
     pub genre: Option<String>,
     pub tags: Option<String>,
@@ -145,7 +145,7 @@ pub struct ArtistStats {
     pub related_artists: Vec<RelatedArtist>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
 pub struct RelatedArtist {
     pub id: i64,
     pub name: String,
@@ -153,7 +153,7 @@ pub struct RelatedArtist {
 }
 
 /// Stats summary for the dashboard.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Stats {
     pub total_events: i64,
     pub total_artists: i64,
@@ -173,26 +173,26 @@ pub struct Stats {
 /// A single row for the Top Genres radar chart. Genres don't have DB ids
 /// — they're derived from comma-split `artists.tags` values — so this uses
 /// a dedicated struct instead of piggy-backing on `EntityCount`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct GenreCount {
     pub name: String,
     pub count: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
 pub struct EntityCount {
     pub id: i64,
     pub name: String,
     pub count: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
 pub struct YearCount {
     pub year: String,
     pub count: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
 pub struct MonthCount {
     pub month: String,
     pub count: i64,
@@ -200,7 +200,7 @@ pub struct MonthCount {
 
 /// Venues need location context in list views since the same name can exist in
 /// different cities (e.g., "The Independent" in SF vs Austin).
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
 pub struct VenueWithCount {
     pub id: i64,
     pub name: String,
@@ -213,7 +213,7 @@ pub struct VenueWithCount {
 /// `tags` is a cleaned list (trimmed, non-empty) rather than the raw CSV so
 /// the frontend can filter and render without re-parsing. Source-agnostic —
 /// see `db::tags` for the future custom-tag merge point.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ArtistWithCount {
     pub id: i64,
     pub name: String,
@@ -224,7 +224,7 @@ pub struct ArtistWithCount {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
 pub struct LocationWithCount {
     pub id: i64,
     pub city: String,
@@ -235,7 +235,7 @@ pub struct LocationWithCount {
 /// Per-entity list of event names used only by the list-page tooltip bars.
 /// Aggregated in Rust so the frontend doesn't have to pull every event just
 /// to walk the relationships itself — see `queries::get_*_event_names`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct EntityEventNames {
     pub id: i64,
     pub names: Vec<String>,
@@ -249,7 +249,7 @@ pub struct EntityEventNames {
 /// `days_until` is a signed count of calendar days from today (local) to
 /// the event date. Zero means today, one means tomorrow. The frontend
 /// owns the eventual string label so i18n stays on the display side.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct UpcomingEvent {
     pub event: EventDetail,
     pub days_until: i64,
@@ -258,7 +258,7 @@ pub struct UpcomingEvent {
 /// Photo/video counts for the Media page tab strip. Kept as a tiny
 /// dedicated shape rather than returning a generic map so serde generates
 /// a nice TS interface without a `Record<string, number>`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct MediaCounts {
     pub all: i64,
     pub photos: i64,
@@ -270,13 +270,13 @@ pub struct MediaCounts {
 /// autocomplete doesn't re-implement the rule in TypeScript. `display_name`
 /// is the first-seen casing, mirroring the policy used by the top-genres
 /// aggregator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct VenueAutocompleteEntry {
     pub display_name: String,
     pub locations: Vec<VenueLocation>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct VenueLocation {
     pub city: String,
     pub state: String,
@@ -287,7 +287,7 @@ pub struct VenueLocation {
 /// `query_artists` tag filter). `display` is the first-seen casing — same
 /// policy as the top-genres aggregator. `count` is the number of distinct
 /// artists that carry this tag.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TagCount {
     pub key: String,
     pub display: String,
@@ -321,7 +321,7 @@ pub struct EventMediaRow {
 /// by the frontend's `convertFileSrc`. `event_name` / `event_date` are
 /// populated by the bulk query for cross-entity galleries; on single-event
 /// fetches they are left empty.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct EventMedia {
     pub id: i64,
     pub event_id: i64,

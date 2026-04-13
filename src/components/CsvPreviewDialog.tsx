@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import type { PreviewRow, PreviewStatus } from "@/types";
+import type { PreviewRow, PreviewStatus } from "@/bindings";
 
 interface CsvPreviewDialogProps {
   open: boolean;

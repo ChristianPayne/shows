@@ -3,14 +3,14 @@ use tauri::{Emitter, State};
 use std::sync::Mutex;
 use std::time::Instant;
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type)]
 pub struct SetlistSong {
     pub name: String,
     pub info: Option<String>,
     pub tape: bool,
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, specta::Type)]
 pub struct SetlistResult {
     pub event_date: String,
     pub venue_name: String,
@@ -41,12 +41,14 @@ async fn get_api_key(pool: &SqlitePool) -> Option<String> {
     key.filter(|k| !k.is_empty())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn has_setlistfm_key(pool: State<'_, SqlitePool>) -> Result<bool, String> {
     Ok(get_api_key(pool.inner()).await.is_some())
 }
 
 /// Check cache only — no API call. Returns None if not cached.
+#[specta::specta]
 #[tauri::command]
 pub async fn get_cached_setlist(
     pool: State<'_, SqlitePool>,
@@ -82,6 +84,7 @@ pub async fn get_cached_setlist(
 }
 
 /// Fetch setlist from API (with cache check first).
+#[specta::specta]
 #[tauri::command]
 pub async fn get_setlist(
     pool: State<'_, SqlitePool>,

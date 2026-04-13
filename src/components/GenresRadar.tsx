@@ -11,7 +11,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import type { GenreCount } from "@/types";
+import type { GenreCount } from "@/bindings";
 
 const chartConfig = {
   count: {

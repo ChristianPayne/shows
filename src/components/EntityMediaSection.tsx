@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { MediaGallery } from "@/components/MediaGallery";
-import * as api from "@/api";
-import type { EventMedia } from "@/types";
+import { commands } from "@/lib/commands";
+import type { EventMedia } from "@/bindings";
 
 interface EntityMediaSectionProps {
   // Events this entity (artist/venue/location) is attached to. The section
@@ -20,7 +20,7 @@ export function EntityMediaSection({ eventIds }: EntityMediaSectionProps) {
       return;
     }
     let cancelled = false;
-    api.getMediaForEvents(eventIds).then((next) => {
+    commands.getMediaForEvents(eventIds).then((next) => {
       if (!cancelled) {
         setMedia(next);
         setLoaded(true);

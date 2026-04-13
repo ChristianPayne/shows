@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ArrowUpDown, Check, Play } from "lucide-react";
-import type { EventMedia } from "@/types";
+import type { EventMedia } from "@/bindings";
 import { MediaViewer } from "./MediaViewer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { isVideoMime, isMediaPath } from "@/lib/media";

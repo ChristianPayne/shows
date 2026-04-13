@@ -4,7 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { X, ChevronLeft, ChevronRight, Trash2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { EventMedia } from "@/types";
+import type { EventMedia } from "@/bindings";
 import { isVideoMime } from "@/lib/media";
 
 /** Paid ($0.99) universal HEVC Video Extensions on the Microsoft Store. This

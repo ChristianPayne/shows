@@ -3,8 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { GenresRadar } from "@/components/GenresRadar";
-import * as api from "@/api";
-import type { Stats, UpcomingEvent } from "@/types";
+import { commands } from "@/lib/commands";
+import type { Stats, UpcomingEvent } from "@/bindings";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -17,7 +17,7 @@ export function StatsPage() {
   const [upcoming, setUpcoming] = useState<UpcomingEvent[]>([]);
 
   useEffect(() => {
-    Promise.all([api.getStats(), api.getUpcomingEvents()]).then(([s, u]) => {
+    Promise.all([commands.getStats(), commands.getUpcomingEvents()]).then(([s, u]) => {
       setStats(s);
       setUpcoming(u);
     });

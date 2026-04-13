@@ -9,36 +9,12 @@ use std::sync::Mutex;
 use commands::{backup, entities, events, export, genres, import, links, maintenance, media, query, setlists, settings, stats};
 use tauri::Manager;
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .setup(|app| {
-            let app_data_dir = app.path().app_data_dir()
-                .expect("Failed to resolve app data directory");
-
-            // Run DB init and the dev-media-split first-launch migration on
-            // the same blocking runtime since setup is sync. The migration
-            // is a no-op in release (the dev/release roots collide), so this
-            // costs nothing for production users.
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let pool = rt
-                .block_on(db::init(app_data_dir.clone()))
-                .expect("Failed to initialize database");
-            if let Err(e) = rt.block_on(media::migrate_dev_media_split(&pool, &app_data_dir)) {
-                eprintln!("[startup] media split migration failed: {}", e);
-            }
-
-            app.manage(pool);
-            app.manage(updater::PendingUpdate(Mutex::new(None)));
-
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
+/// Shared builder construction so `run()` and the bindings-generation test
+/// stay in lock-step — the command list only exists in one place, and the
+/// test can call `.export()` on its own copy without spinning up a window.
+pub fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
             events::get_events,
             events::get_upcoming_events,
             events::get_event,
@@ -102,6 +78,57 @@ pub fn run() {
             updater::fetch_update,
             updater::install_update,
         ])
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    // tauri-specta owns both IPC dispatch and TS binding generation now. In
+    // dev builds the Builder emits `src/bindings.ts` on startup so the
+    // frontend's hand-written wrappers stay obsolete; in release builds
+    // the `export` call is compiled out so bundled apps never touch that
+    // path. Every command listed in `make_specta_builder` has a matching
+    // `#[specta::specta]` annotation — specta's macro enforces the link at
+    // compile time.
+    let specta_builder = make_specta_builder();
+
+    #[cfg(debug_assertions)]
+    specta_builder
+        .export(
+            specta_typescript::Typescript::default()
+                .bigint(specta_typescript::BigIntExportBehavior::Number)
+                .header("// @ts-nocheck\n"),
+            "../src/bindings.ts",
+        )
+        .expect("failed to export typescript bindings");
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            let app_data_dir = app.path().app_data_dir()
+                .expect("Failed to resolve app data directory");
+
+            // Run DB init and the dev-media-split first-launch migration on
+            // the same blocking runtime since setup is sync. The migration
+            // is a no-op in release (the dev/release roots collide), so this
+            // costs nothing for production users.
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let pool = rt
+                .block_on(db::init(app_data_dir.clone()))
+                .expect("Failed to initialize database");
+            if let Err(e) = rt.block_on(media::migrate_dev_media_split(&pool, &app_data_dir)) {
+                eprintln!("[startup] media split migration failed: {}", e);
+            }
+
+            app.manage(pool);
+            app.manage(updater::PendingUpdate(Mutex::new(None)));
+
+            Ok(())
+        })
+        .invoke_handler(specta_builder.invoke_handler())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

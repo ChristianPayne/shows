@@ -18,14 +18,14 @@ import { SkeletonTableRow } from "@/components/Skeleton";
 import { MergeDialog } from "@/components/MergeDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
-import * as api from "@/api";
+import { commands } from "@/lib/commands";
 import type {
   VenueWithCount,
   EventDetail,
   EntitySortKey,
   SortDir,
   EventSortKey,
-} from "@/types";
+} from "@/bindings";
 
 let lastVenueCount = 0;
 
@@ -39,13 +39,13 @@ export function VenuesListPage() {
   const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(new Map());
 
   useEffect(() => {
-    api.getVenueEventNames().then((rows) => {
+    commands.getVenueEventNames().then((rows) => {
       setVenueEvents(new Map(rows.map((r) => [r.id, r.names])));
     });
   }, []);
 
   useEffect(() => {
-    api.queryVenues({ query: search, sortKey, sortDir }).then((data) => {
+    commands.queryVenues({ query: search, sortKey, sortDir }).then((data) => {
       lastVenueCount = data.length;
       setVenues(data);
     });
@@ -165,11 +165,11 @@ export function VenueDetailPage() {
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    api.getVenues().then(setVenues);
+    commands.getVenues().then(setVenues);
   }, []);
 
   useEffect(() => {
-    if (venueId) api.getEventsForVenue(venueId, eventsSortKey, eventsSortDir).then(setEvents);
+    if (venueId) commands.getEventsForVenue(venueId, eventsSortKey, eventsSortDir).then(setEvents);
   }, [venueId, eventsSortKey, eventsSortDir]);
 
   const venue = useMemo(
@@ -190,7 +190,7 @@ export function VenueDetailPage() {
               value={venue.name}
               onCancel={() => setEditing(false)}
               onSave={async (name) => {
-                await api.renameVenue(venue.id, name);
+                await commands.renameVenue(venue.id, name);
                 setVenues((prev) =>
                   prev.map((v) => (v.id === venue.id ? { ...v, name } : v))
                 );
@@ -208,7 +208,7 @@ export function VenueDetailPage() {
           onEdit={() => setEditing(true)}
           onMerge={() => setMergeOpen(true)}
           onDelete={venue.event_count === 0 ? async () => {
-            await api.deleteVenue(venue.id);
+            await commands.deleteVenue(venue.id);
             navigate("/venues");
           } : undefined}
         />
@@ -220,10 +220,10 @@ export function VenueDetailPage() {
         keepId={venue.id}
         options={venues.map((v) => ({ id: v.id, label: v.name }))}
         onMerge={async (keepId, mergeId) => {
-          await api.mergeVenues(keepId, mergeId);
+          await commands.mergeVenues(keepId, mergeId);
           const [refreshedVenues, refreshedEvents] = await Promise.all([
-            api.getVenues(),
-            api.getEventsForVenue(keepId, eventsSortKey, eventsSortDir),
+            commands.getVenues(),
+            commands.getEventsForVenue(keepId, eventsSortKey, eventsSortDir),
           ]);
           setVenues(refreshedVenues);
           setEvents(refreshedEvents);

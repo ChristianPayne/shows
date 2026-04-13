@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
-import * as api from "@/api";
-import type { EventMedia, MediaCounts } from "@/types";
+import { commands } from "@/lib/commands";
+import type { EventMedia, MediaCounts } from "@/bindings";
 import { MediaThumbnail } from "@/components/MediaGallery";
 import { MediaViewer } from "@/components/MediaViewer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -30,8 +30,8 @@ export function MediaPage() {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    api.getAllMedia().then(setMedia);
-    api.getMediaCounts().then(setCounts);
+    commands.getAllMedia().then(setMedia);
+    commands.getMediaCounts().then(setCounts);
   }, []);
 
   const filtered = useMemo(() => {
@@ -65,10 +65,10 @@ export function MediaPage() {
   }, [filtered]);
 
   const handleDelete = async (mediaId: number) => {
-    await api.deleteEventMedia(mediaId);
+    await commands.deleteEventMedia(mediaId);
     const [refreshed, refreshedCounts] = await Promise.all([
-      api.getAllMedia(),
-      api.getMediaCounts(),
+      commands.getAllMedia(),
+      commands.getMediaCounts(),
     ]);
     setMedia(refreshed);
     setCounts(refreshedCounts);

@@ -20,13 +20,13 @@ import { MediaGallery } from "@/components/MediaGallery";
 import { MediaUploadButton } from "@/components/MediaUploadButton";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, ChevronDown, ChevronUp, CheckSquare, Trash2, X, ListMusic } from "lucide-react";
-import * as api from "@/api";
+import { commands } from "@/lib/commands";
 import type {
   EventDetail as EventDetailType,
   ArtistContextSet,
   SetlistResult,
   EventMedia,
-} from "@/types";
+} from "@/bindings";
 
 interface EventDetailProps {
   event: EventDetailType;
@@ -46,13 +46,13 @@ export function EventDetailView({
   const [setlists, setSetlists] = useState<Map<number, SetlistResult | null>>(new Map());
 
   useEffect(() => {
-    api.getArtistContext(event.id, event.date).then((sets) => {
+    commands.getArtistContext(event.id, event.date).then((sets) => {
       setArtistSets(sets);
       // Load cached setlists (no API calls)
       for (const set of sets) {
         for (const artist of set.artists) {
           if (artist.mbid) {
-            api.getCachedSetlist(artist.mbid, event.date).then((result) => {
+            commands.getCachedSetlist(artist.mbid, event.date).then((result) => {
               if (result !== null) {
                 setSetlists((prev) => new Map(prev).set(artist.id, result));
               }
@@ -61,7 +61,7 @@ export function EventDetailView({
         }
       }
     });
-    api.hasSetlistfmKey().then(setHasSetlistKey);
+    commands.hasSetlistfmKey().then(setHasSetlistKey);
   }, [event.id, event.date]);
 
   const daysLabel = getDaysLabel(event.date, event.end_date);
@@ -138,7 +138,7 @@ export function EventDetailView({
                   showSetlistButton={hasSetlistKey && !!a.mbid}
                   onFetchSetlist={async () => {
                     if (!a.mbid) return;
-                    const result = await api.getSetlist(a.mbid, event.date);
+                    const result = await commands.getSetlist(a.mbid, event.date);
                     setSetlists((prev) => new Map(prev).set(a.id, result));
                   }}
                 />
@@ -287,7 +287,7 @@ function EventMediaSection({ eventId }: { eventId: number }) {
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const refresh = useCallback(async () => {
-    const next = await api.getEventMedia(eventId);
+    const next = await commands.getEventMedia(eventId);
     setMedia(next);
   }, [eventId]);
 
@@ -310,14 +310,14 @@ function EventMediaSection({ eventId }: { eventId: number }) {
   }, [selectMode]);
 
   const handleDelete = async (mediaId: number) => {
-    await api.deleteEventMedia(mediaId);
+    await commands.deleteEventMedia(mediaId);
     await refresh();
   };
 
   const handleDropFiles = async (paths: string[]) => {
     for (const path of paths) {
       try {
-        await api.addEventMedia(eventId, path);
+        await commands.addEventMedia(eventId, path);
       } catch {
         // Skip unreadable/unsupported files silently — the button path
         // surfaces errors; a drag-drop of 10 files shouldn't spam alerts.
@@ -347,7 +347,7 @@ function EventMediaSection({ eventId }: { eventId: number }) {
       // are already serialized behind the connection mutex. Parallelizing
       // would only save a few ms and complicates error reporting.
       for (const id of selectedIds) {
-        await api.deleteEventMedia(id);
+        await commands.deleteEventMedia(id);
       }
       await refresh();
       exitSelectMode();

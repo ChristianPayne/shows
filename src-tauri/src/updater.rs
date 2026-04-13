@@ -3,28 +3,12 @@ use std::sync::Mutex;
 use tauri::{ipc::Channel, AppHandle, State, Url};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error(transparent)]
-    Updater(#[from] tauri_plugin_updater::Error),
-    #[error("there is no pending update")]
-    NoPendingUpdate,
-}
-
-impl Serialize for Error {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(self.to_string().as_str())
-    }
-}
-
-type Result<T> = std::result::Result<T, Error>;
-
 pub struct PendingUpdate(pub Mutex<Option<Update>>);
 
-#[derive(Clone, Serialize)]
+/// Adjacently-tagged so the frontend can discriminate on `event` and get a
+/// typed `data` payload. Kept in sync with the `useUpdater` hook's switch on
+/// `event.event`.
+#[derive(Clone, Serialize, specta::Type)]
 #[serde(tag = "event", content = "data")]
 pub enum DownloadEvent {
     #[serde(rename_all = "camelCase")]
@@ -34,7 +18,7 @@ pub enum DownloadEvent {
     Finished,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateMetadata {
     version: String,
@@ -42,10 +26,11 @@ pub struct UpdateMetadata {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn fetch_update(
     app: AppHandle,
     pending_update: State<'_, PendingUpdate>,
-) -> Result<Option<UpdateMetadata>> {
+) -> Result<Option<UpdateMetadata>, String> {
     let url = Url::parse(
         "https://github.com/ChristianPayne/shows/releases/latest/download/latest.json",
     )
@@ -53,10 +38,13 @@ pub async fn fetch_update(
 
     let update = app
         .updater_builder()
-        .endpoints(vec![url])?
-        .build()?
+        .endpoints(vec![url])
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?
         .check()
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
 
     let metadata = update.as_ref().map(|u| UpdateMetadata {
         version: u.version.clone(),
@@ -69,12 +57,13 @@ pub async fn fetch_update(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn install_update(
     pending_update: State<'_, PendingUpdate>,
     on_event: Channel<DownloadEvent>,
-) -> Result<()> {
+) -> Result<(), String> {
     let Some(update) = pending_update.0.lock().unwrap().take() else {
-        return Err(Error::NoPendingUpdate);
+        return Err("there is no pending update".to_string());
     };
 
     let mut started = false;
@@ -92,7 +81,8 @@ pub async fn install_update(
                 let _ = on_event.send(DownloadEvent::Finished);
             },
         )
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }

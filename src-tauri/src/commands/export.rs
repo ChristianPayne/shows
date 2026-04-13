@@ -4,6 +4,7 @@ use tauri::State;
 use crate::db::queries;
 
 /// Export all events as CSV to a file. B2b artists are joined with " b2b ".
+#[specta::specta]
 #[tauri::command]
 pub async fn export_csv(pool: State<'_, SqlitePool>, destination: String) -> Result<(), String> {
     let events = queries::get_all_events(pool.inner())

@@ -1,7 +1,7 @@
 use sqlx::SqlitePool;
 use tauri::State;
 
-#[derive(Clone, serde::Serialize, sqlx::FromRow)]
+#[derive(Clone, serde::Serialize, specta::Type, sqlx::FromRow)]
 pub struct ArtistLinks {
     pub link_spotify: Option<String>,
     pub link_instagram: Option<String>,
@@ -13,6 +13,7 @@ pub struct ArtistLinks {
 
 /// Get external links for an artist. Returns from DB if cached,
 /// otherwise fetches from MusicBrainz using the stored mbid and saves.
+#[specta::specta]
 #[tauri::command]
 pub async fn get_artist_links(
     pool: State<'_, SqlitePool>,

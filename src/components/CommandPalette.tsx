@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Command } from "cmdk";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Calendar, Mic2, Building2, MapPin } from "lucide-react";
-import * as api from "@/api";
-import type { EventDetail, ArtistWithCount, VenueWithCount, LocationWithCount } from "@/types";
+import { commands } from "@/lib/commands";
+import type { EventDetail, ArtistWithCount, VenueWithCount, LocationWithCount } from "@/bindings";
 
 // Rust owns the search + limit pagination for all four entity types. The
 // palette just re-queries on every keystroke — 40 rows max per render, so
@@ -41,10 +41,10 @@ export function CommandPalette() {
     // Fire all four queries in parallel; each one is search-scoped on the
     // Rust side so we only get back the rows we'll actually render.
     Promise.all([
-      api.queryArtists({ query: search, limit: RESULT_LIMIT }),
-      api.queryEvents({ query: search, limit: RESULT_LIMIT }),
-      api.queryVenues({ query: search, limit: RESULT_LIMIT }),
-      api.queryLocations({ query: search, limit: RESULT_LIMIT }),
+      commands.queryArtists({ query: search, limit: RESULT_LIMIT }),
+      commands.queryEvents({ query: search, limit: RESULT_LIMIT }),
+      commands.queryVenues({ query: search, limit: RESULT_LIMIT }),
+      commands.queryLocations({ query: search, limit: RESULT_LIMIT }),
     ]).then(([a, e, v, l]) => {
       setArtists(a);
       setEvents(e);

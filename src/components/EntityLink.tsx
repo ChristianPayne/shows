@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import type { ArtistSet } from "@/types";
+import type { ArtistSet } from "@/bindings";
 
 interface EntityLinkProps {
   to: string;

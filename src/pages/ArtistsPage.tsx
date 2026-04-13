@@ -20,7 +20,7 @@ import { MergeDialog } from "@/components/MergeDialog";
 import { MatchPickerDialog } from "@/components/MatchPickerDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
-import * as api from "@/api";
+import { commands } from "@/lib/commands";
 import type {
   ArtistWithCount,
   EventDetail,
@@ -30,7 +30,7 @@ import type {
   SortDir,
   EventSortKey,
   TagCount,
-} from "@/types";
+} from "@/bindings";
 
 let lastArtistCount = 0;
 
@@ -91,8 +91,8 @@ export function ArtistsListPage() {
     : Math.max(0, allTags.length - visibleTags.length);
 
   useEffect(() => {
-    api.getArtistTagCounts().then(setAllTags);
-    api.getArtistEventNames().then((rows) => {
+    commands.getArtistTagCounts().then(setAllTags);
+    commands.getArtistEventNames().then((rows) => {
       setArtistEvents(new Map(rows.map((r) => [r.id, r.names])));
     });
   }, []);
@@ -100,7 +100,7 @@ export function ArtistsListPage() {
   // Rust owns filter + sort: every change to search / tags / sort re-queries.
   useEffect(() => {
     const tags = searchParams.getAll("tag").map((t) => t.toLowerCase());
-    api
+    commands
       .queryArtists({ query: search, tags, sortKey, sortDir })
       .then((data) => {
         lastArtistCount = data.length;
@@ -282,14 +282,14 @@ export function ArtistDetailPage() {
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    api.getArtists().then(setArtists);
+    commands.getArtists().then(setArtists);
   }, []);
 
   useEffect(() => {
     if (artistId) {
-      api.getEventsForArtist(artistId, eventsSortKey, eventsSortDir).then(setEvents);
-      api.getArtistLinks(artistId).then(setArtistLinks);
-      api.getArtistStats(artistId).then(setStats);
+      commands.getEventsForArtist(artistId, eventsSortKey, eventsSortDir).then(setEvents);
+      commands.getArtistLinks(artistId).then(setArtistLinks);
+      commands.getArtistStats(artistId).then(setStats);
     }
   }, [artistId, eventsSortKey, eventsSortDir]);
 
@@ -312,7 +312,7 @@ export function ArtistDetailPage() {
               value={artist.name}
               onCancel={() => setEditing(false)}
               onSave={async (name) => {
-                await api.renameArtist(artist.id, name);
+                await commands.renameArtist(artist.id, name);
                 setArtists((prev) =>
                   prev.map((a) => (a.id === artist.id ? { ...a, name } : a))
                 );
@@ -328,7 +328,7 @@ export function ArtistDetailPage() {
           onMerge={() => setMergeOpen(true)}
           onFixMatch={() => setMatchOpen(true)}
           onDelete={artist.event_count === 0 ? async () => {
-            await api.deleteArtist(artist.id);
+            await commands.deleteArtist(artist.id);
             navigate("/artists");
           } : undefined}
         />
@@ -340,8 +340,8 @@ export function ArtistDetailPage() {
         artistId={artist.id}
         artistName={artist.name}
         onApplied={() => {
-          api.getArtistStats(artistId).then(setStats);
-          api.getArtistLinks(artistId).then(setArtistLinks);
+          commands.getArtistStats(artistId).then(setStats);
+          commands.getArtistLinks(artistId).then(setArtistLinks);
         }}
       />
 
@@ -352,10 +352,10 @@ export function ArtistDetailPage() {
         keepId={artist.id}
         options={artists.map((a) => ({ id: a.id, label: a.name }))}
         onMerge={async (keepId, mergeId) => {
-          await api.mergeArtists(keepId, mergeId);
+          await commands.mergeArtists(keepId, mergeId);
           const [refreshedArtists, refreshedEvents] = await Promise.all([
-            api.getArtists(),
-            api.getEventsForArtist(keepId, eventsSortKey, eventsSortDir),
+            commands.getArtists(),
+            commands.getEventsForArtist(keepId, eventsSortKey, eventsSortDir),
           ]);
           setArtists(refreshedArtists);
           setEvents(refreshedEvents);

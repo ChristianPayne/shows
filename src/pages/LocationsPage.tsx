@@ -18,14 +18,14 @@ import { SkeletonTableRow } from "@/components/Skeleton";
 import { MergeDialog } from "@/components/MergeDialog";
 import { EditableLocation } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
-import * as api from "@/api";
+import { commands } from "@/lib/commands";
 import type {
   LocationWithCount,
   EventDetail,
   EntitySortKey,
   SortDir,
   EventSortKey,
-} from "@/types";
+} from "@/bindings";
 
 let lastLocationCount = 0;
 
@@ -39,13 +39,13 @@ export function LocationsListPage() {
   const [locationEvents, setLocationEvents] = useState<Map<number, string[]>>(new Map());
 
   useEffect(() => {
-    api.getLocationEventNames().then((rows) => {
+    commands.getLocationEventNames().then((rows) => {
       setLocationEvents(new Map(rows.map((r) => [r.id, r.names])));
     });
   }, []);
 
   useEffect(() => {
-    api.queryLocations({ query: search, sortKey, sortDir }).then((data) => {
+    commands.queryLocations({ query: search, sortKey, sortDir }).then((data) => {
       lastLocationCount = data.length;
       setLocations(data);
     });
@@ -162,12 +162,12 @@ export function LocationDetailPage() {
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    api.getLocations().then(setLocations);
+    commands.getLocations().then(setLocations);
   }, []);
 
   useEffect(() => {
     if (locationId)
-      api.getEventsForLocation(locationId, eventsSortKey, eventsSortDir).then(setEvents);
+      commands.getEventsForLocation(locationId, eventsSortKey, eventsSortDir).then(setEvents);
   }, [locationId, eventsSortKey, eventsSortDir]);
 
   const location = useMemo(
@@ -189,7 +189,7 @@ export function LocationDetailPage() {
               state={location.state}
               onCancel={() => setEditing(false)}
               onSave={async (city, state) => {
-                await api.renameLocation(location.id, city, state);
+                await commands.renameLocation(location.id, city, state);
                 setLocations((prev) =>
                   prev.map((l) => (l.id === location.id ? { ...l, city, state } : l))
                 );
@@ -207,7 +207,7 @@ export function LocationDetailPage() {
           onEdit={() => setEditing(true)}
           onMerge={() => setMergeOpen(true)}
           onDelete={location.event_count === 0 ? async () => {
-            await api.deleteLocation(location.id);
+            await commands.deleteLocation(location.id);
             navigate("/locations");
           } : undefined}
         />
@@ -219,10 +219,10 @@ export function LocationDetailPage() {
         keepId={location.id}
         options={locations.map((l) => ({ id: l.id, label: `${l.city}, ${l.state}` }))}
         onMerge={async (keepId, mergeId) => {
-          await api.mergeLocations(keepId, mergeId);
+          await commands.mergeLocations(keepId, mergeId);
           const [refreshedLocations, refreshedEvents] = await Promise.all([
-            api.getLocations(),
-            api.getEventsForLocation(keepId, eventsSortKey, eventsSortDir),
+            commands.getLocations(),
+            commands.getEventsForLocation(keepId, eventsSortKey, eventsSortDir),
           ]);
           setLocations(refreshedLocations);
           setEvents(refreshedEvents);

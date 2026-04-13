@@ -6,7 +6,7 @@ use crate::commands::media;
 use crate::db::models::{ArtistContextSet, EventDetail, UpcomingEvent};
 use crate::db::queries;
 
-#[derive(serde::Deserialize, serde::Serialize, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, specta::Type, Clone)]
 pub struct ArtistEntry {
     pub name: String,
     pub set_group: Option<i64>,
@@ -14,6 +14,7 @@ pub struct ArtistEntry {
 
 /// Toggle b2b linkage between artist at `index` and the one before it.
 /// Returns the updated artist list with corrected set_groups.
+#[specta::specta]
 #[tauri::command]
 pub fn toggle_b2b(artists: Vec<ArtistEntry>, index: usize) -> Vec<ArtistEntry> {
     if index == 0 || index >= artists.len() {
@@ -61,7 +62,7 @@ pub fn toggle_b2b(artists: Vec<ArtistEntry>, index: usize) -> Vec<ArtistEntry> {
     result
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize, specta::Type)]
 pub struct CreateEventInput {
     pub name: String,
     pub date: String,
@@ -72,11 +73,13 @@ pub struct CreateEventInput {
     pub artists: Vec<ArtistEntry>,
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_events(pool: State<'_, SqlitePool>) -> Result<Vec<EventDetail>, String> {
     queries::get_all_events(&pool).await.map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_upcoming_events(
     pool: State<'_, SqlitePool>,
@@ -86,6 +89,7 @@ pub async fn get_upcoming_events(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_event(pool: State<'_, SqlitePool>, event_id: i64) -> Result<Option<EventDetail>, String> {
     queries::get_event_by_id(&pool, event_id)
@@ -93,6 +97,7 @@ pub async fn get_event(pool: State<'_, SqlitePool>, event_id: i64) -> Result<Opt
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_artist_context(
     pool: State<'_, SqlitePool>,
@@ -104,6 +109,7 @@ pub async fn get_artist_context(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn create_event(
     pool: State<'_, SqlitePool>,
@@ -152,6 +158,7 @@ pub async fn create_event(
     Ok(event_id)
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn update_event(
     pool: State<'_, SqlitePool>,
@@ -230,6 +237,7 @@ pub async fn update_event(
     Ok(())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn set_event_cancelled(
     pool: State<'_, SqlitePool>,
@@ -245,6 +253,7 @@ pub async fn set_event_cancelled(
     Ok(())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn delete_event(
     pool: State<'_, SqlitePool>,

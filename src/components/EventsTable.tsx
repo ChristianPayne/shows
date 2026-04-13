@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { ArtistBadgeList, EntityLink } from "@/components/EntityLink";
 import { ArrowUpDown } from "lucide-react";
-import type { EventDetail, EventSortKey, SortDir } from "@/types";
+import type { EventDetail, EventSortKey, SortDir } from "@/bindings";
 
 // EventsTable is purely presentational — it never filters or sorts. The
 // parent fetches pre-sorted events from Rust (query_events or one of the

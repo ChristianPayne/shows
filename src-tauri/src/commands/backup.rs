@@ -22,6 +22,7 @@ const DB_ENTRY: &str = "shows.db";
 const MEDIA_PREFIX: &str = "media/";
 const LEGACY_IMAGES_PREFIX: &str = "images/";
 
+#[specta::specta]
 #[tauri::command]
 pub async fn backup_database(
     app_handle: tauri::AppHandle,
@@ -132,6 +133,7 @@ fn add_dir_recursive(
     Ok(())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn restore_database(
     app_handle: tauri::AppHandle,

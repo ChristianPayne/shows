@@ -9,6 +9,7 @@ use crate::db::models::{
 };
 use crate::db::queries;
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_artists(pool: State<'_, SqlitePool>) -> Result<Vec<ArtistWithCount>, String> {
     queries::get_artists_with_counts(&pool)
@@ -16,6 +17,7 @@ pub async fn get_artists(pool: State<'_, SqlitePool>) -> Result<Vec<ArtistWithCo
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_artist_tag_counts(
     pool: State<'_, SqlitePool>,
@@ -25,6 +27,7 @@ pub async fn get_artist_tag_counts(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_venues(pool: State<'_, SqlitePool>) -> Result<Vec<VenueWithCount>, String> {
     queries::get_venues_with_counts(&pool)
@@ -32,6 +35,7 @@ pub async fn get_venues(pool: State<'_, SqlitePool>) -> Result<Vec<VenueWithCoun
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_venue_autocomplete(
     pool: State<'_, SqlitePool>,
@@ -41,6 +45,7 @@ pub async fn get_venue_autocomplete(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_locations(pool: State<'_, SqlitePool>) -> Result<Vec<LocationWithCount>, String> {
     queries::get_locations_with_counts(&pool)
@@ -53,6 +58,7 @@ pub async fn get_locations(pool: State<'_, SqlitePool>) -> Result<Vec<LocationWi
 // comparator used by the main events list. Omit them and you get the legacy
 // behavior: date descending, which is still the only order the SQL guarantees.
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_events_for_artist(
     pool: State<'_, SqlitePool>,
@@ -71,6 +77,7 @@ pub async fn get_events_for_artist(
     Ok(events)
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_events_for_venue(
     pool: State<'_, SqlitePool>,
@@ -89,6 +96,7 @@ pub async fn get_events_for_venue(
     Ok(events)
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_events_for_location(
     pool: State<'_, SqlitePool>,
@@ -112,6 +120,7 @@ pub async fn get_events_for_location(
 // entities with zero events are omitted (the tooltip is only useful when
 // there's something to show).
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_artist_event_names(
     pool: State<'_, SqlitePool>,
@@ -121,6 +130,7 @@ pub async fn get_artist_event_names(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_venue_event_names(
     pool: State<'_, SqlitePool>,
@@ -130,6 +140,7 @@ pub async fn get_venue_event_names(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_location_event_names(
     pool: State<'_, SqlitePool>,
@@ -139,6 +150,7 @@ pub async fn get_location_event_names(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn get_artist_stats(pool: State<'_, SqlitePool>, artist_id: i64) -> Result<ArtistStats, String> {
     queries::get_artist_stats(&pool, artist_id)
@@ -146,6 +158,7 @@ pub async fn get_artist_stats(pool: State<'_, SqlitePool>, artist_id: i64) -> Re
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn rename_artist(
     pool: State<'_, SqlitePool>,
@@ -176,16 +189,19 @@ pub async fn rename_artist(
     Ok(())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn rename_venue(pool: State<'_, SqlitePool>, venue_id: i64, name: String) -> Result<(), String> {
     queries::rename_venue(&pool, venue_id, &name).await.map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn rename_location(pool: State<'_, SqlitePool>, location_id: i64, city: String, state: String) -> Result<(), String> {
     queries::rename_location(&pool, location_id, &city, &state).await.map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn merge_artists(
     pool: State<'_, SqlitePool>,
@@ -197,6 +213,7 @@ pub async fn merge_artists(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn merge_venues(
     pool: State<'_, SqlitePool>,
@@ -208,6 +225,7 @@ pub async fn merge_venues(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn merge_locations(
     pool: State<'_, SqlitePool>,
@@ -219,6 +237,7 @@ pub async fn merge_locations(
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn delete_venue(pool: State<'_, SqlitePool>, venue_id: i64) -> Result<(), String> {
     queries::delete_venue(&pool, venue_id)
@@ -226,6 +245,7 @@ pub async fn delete_venue(pool: State<'_, SqlitePool>, venue_id: i64) -> Result<
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn delete_artist(pool: State<'_, SqlitePool>, artist_id: i64) -> Result<(), String> {
     queries::delete_artist(&pool, artist_id)
@@ -233,6 +253,7 @@ pub async fn delete_artist(pool: State<'_, SqlitePool>, artist_id: i64) -> Resul
         .map_err(|e| e.to_string())
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn delete_location(pool: State<'_, SqlitePool>, location_id: i64) -> Result<(), String> {
     queries::delete_location(&pool, location_id)

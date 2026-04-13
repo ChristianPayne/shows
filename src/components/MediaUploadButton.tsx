@@ -2,7 +2,7 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import * as api from "@/api";
+import { commands } from "@/lib/commands";
 import { ALL_MEDIA_EXTENSIONS } from "@/lib/media";
 
 interface MediaUploadButtonProps {
@@ -29,7 +29,7 @@ export function MediaUploadButton({ eventId, onUploaded }: MediaUploadButtonProp
     setBusy(true);
     try {
       for (const path of paths) {
-        await api.addEventMedia(eventId, path);
+        await commands.addEventMedia(eventId, path);
       }
       await onUploaded();
     } catch (err) {

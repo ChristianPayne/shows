@@ -1,7 +1,7 @@
 use sqlx::SqlitePool;
 use tauri::{Emitter, State};
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, specta::Type)]
 pub struct GenreProgress {
     pub current: usize,
     pub total: usize,
@@ -24,6 +24,7 @@ struct ArtistMetadata {
 }
 
 /// Fetch metadata from MusicBrainz for all artists that haven't been looked up yet.
+#[specta::specta]
 #[tauri::command]
 pub async fn fetch_genres(
     pool: State<'_, SqlitePool>,
@@ -150,7 +151,7 @@ pub async fn fetch_genres_bg(
     Ok(fetched)
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, specta::Type)]
 pub struct MusicBrainzMatch {
     pub mbid: String,
     pub name: String,
@@ -162,6 +163,7 @@ pub struct MusicBrainzMatch {
 }
 
 /// Search MusicBrainz for multiple artist matches.
+#[specta::specta]
 #[tauri::command]
 pub async fn search_musicbrainz(artist_name: String, limit: Option<i64>) -> Result<Vec<MusicBrainzMatch>, String> {
     let client = reqwest::Client::builder()
@@ -200,6 +202,7 @@ pub async fn search_musicbrainz(artist_name: String, limit: Option<i64>) -> Resu
 }
 
 /// Fetch full metadata for a specific MusicBrainz artist by ID and save to our DB.
+#[specta::specta]
 #[tauri::command]
 pub async fn apply_musicbrainz_match(
     pool: State<'_, SqlitePool>,
@@ -267,6 +270,7 @@ pub async fn apply_musicbrainz_match(
 }
 
 /// Clear all metadata and set mbid to "skip" so the fetcher ignores this artist.
+#[specta::specta]
 #[tauri::command]
 pub async fn clear_artist_metadata(
     pool: State<'_, SqlitePool>,

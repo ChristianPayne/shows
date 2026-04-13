@@ -6,6 +6,7 @@ use crate::commands::media;
 /// Returns the highest applied schema migration version. This is the database
 /// version, distinct from the app version — useful for surfacing in the UI so
 /// users (and bug reports) can pinpoint which schema they're on.
+#[specta::specta]
 #[tauri::command]
 pub async fn get_db_version(pool: State<'_, SqlitePool>) -> Result<i64, String> {
     let version: Option<i64> = sqlx::query_scalar("SELECT MAX(version) FROM schema_version")
@@ -15,6 +16,7 @@ pub async fn get_db_version(pool: State<'_, SqlitePool>) -> Result<i64, String> 
     Ok(version.unwrap_or(0))
 }
 
+#[specta::specta]
 #[tauri::command]
 pub async fn wipe_database(
     pool: State<'_, SqlitePool>,

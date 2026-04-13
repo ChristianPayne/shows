@@ -23,8 +23,8 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import * as api from "@/api";
-import type { EventDetail, CreateEventInput, VenueLocation } from "@/types";
+import { commands } from "@/lib/commands";
+import type { EventDetail, CreateEventInput, VenueLocation } from "@/bindings";
 
 interface EventFormProps {
   initialData?: EventDetail;
@@ -66,17 +66,17 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
   const [venueLocationMap, setVenueLocationMap] = useState<Map<string, VenueLocation[]>>(new Map());
 
   useEffect(() => {
-    api.getVenueAutocomplete().then((entries) => {
+    commands.getVenueAutocomplete().then((entries) => {
       setVenueNames(entries.map((e) => e.display_name));
       setVenueLocationMap(
         new Map(entries.map((e) => [e.display_name.toLowerCase(), e.locations])),
       );
     });
-    api.getLocations().then((l) => {
+    commands.getLocations().then((l) => {
       setCityNames([...new Set(l.map((x) => x.city))]);
       setStateNames([...new Set(l.map((x) => x.state))]);
     });
-    api.getArtists().then((a) => setArtistNames(a.map((x) => x.name)));
+    commands.getArtists().then((a) => setArtistNames(a.map((x) => x.name)));
   }, []);
 
   const availableArtists = useMemo(() => {
@@ -124,7 +124,7 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
   // Delegate b2b toggle logic to Rust
   const toggleB2b = async (index: number) => {
     const entries = artists.map((a) => ({ name: a.name, set_group: a.setGroup }));
-    const result = await api.toggleB2b(entries, index);
+    const result = await commands.toggleB2b(entries, index);
     setArtists(result.map((a) => ({ name: a.name, setGroup: a.set_group })));
   };
 

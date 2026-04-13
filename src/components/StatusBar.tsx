@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
-import * as api from "@/api";
+import { commands } from "@/lib/commands";
 
 interface GenreProgress {
   current: number;
@@ -28,7 +28,7 @@ export function StatusBar() {
 
   useEffect(() => {
     getVersion().then(setVersion);
-    api.getDbVersion().then(setDbVersion);
+    commands.getDbVersion().then(setDbVersion);
   }, []);
 
   useEffect(() => {

@@ -14,7 +14,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { cn } from "@/lib/utils";
 import { applyAccent } from "@/lib/accent";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import * as api from "@/api";
+import { commands } from "@/lib/commands";
 import {
   Calendar,
   Mic2,
@@ -58,8 +58,8 @@ function AppLayout() {
   useEffect(() => {
     // Load persisted theme and accent
     Promise.all([
-      api.getSetting("theme"),
-      api.getSetting("accent"),
+      commands.getSetting("theme"),
+      commands.getSetting("accent"),
     ]).then(([themeValue, accentValue]) => {
       let isDark = document.documentElement.classList.contains("dark");
       if (themeValue === "dark" || themeValue === "light") {
@@ -77,7 +77,7 @@ function AppLayout() {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
-    api.setSetting("theme", next ? "dark" : "light");
+    commands.setSetting("theme", next ? "dark" : "light");
     applyAccent(accentId, next);
   };
 
@@ -161,7 +161,7 @@ function AppLayout() {
               onAccentChange={(id) => {
                 setAccentId(id);
                 applyAccent(id, dark);
-                api.setSetting("accent", id);
+                commands.setSetting("accent", id);
               }}
               dark={dark}
               onToggleDark={toggleDark}
