@@ -21,7 +21,16 @@ import { MatchPickerDialog } from "@/components/MatchPickerDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
-import type { ArtistWithCount, EventDetail, ArtistStats, ArtistLinks } from "@/types";
+import type {
+  ArtistWithCount,
+  EventDetail,
+  ArtistStats,
+  ArtistLinks,
+  EntitySortKey,
+  SortDir,
+  EventSortKey,
+  TagCount,
+} from "@/types";
 
 let lastArtistCount = 0;
 
@@ -32,9 +41,13 @@ const TAG_CHIP_PREVIEW_COUNT = 20;
 export function ArtistsListPage() {
   const navigate = useNavigate();
   const [artists, setArtists] = useState<ArtistWithCount[] | null>(null);
+  // Tag chip data comes pre-aggregated from Rust (get_artist_tag_counts),
+  // so applying a filter never shrinks the chip strip and no dedup/count
+  // logic lives in TypeScript.
+  const [allTags, setAllTags] = useState<TagCount[]>([]);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "count">("count");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<EntitySortKey>("count");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchParams, setSearchParams] = useSearchParams();
   const [tagsExpanded, setTagsExpanded] = useState(false);
 
@@ -42,7 +55,7 @@ export function ArtistsListPage() {
 
   // Selected tags live in the URL so deep links from detail-page pills work
   // and state survives back/forward navigation. Stored lowercased — matching
-  // is case-insensitive, mirroring how the Rust side de-dupes tag casings.
+  // is case-insensitive, and Rust's query_artists lowercases on its end too.
   const selectedTagKeys = useMemo(
     () => new Set(searchParams.getAll("tag").map((t) => t.toLowerCase())),
     [searchParams]
@@ -64,25 +77,6 @@ export function ArtistsListPage() {
     setSearchParams(sp, { replace: true });
   };
 
-  // Distinct tags across the current artist list, with frequency counts and
-  // a stable display spelling (first-seen casing wins, same policy as the
-  // Rust top-genres aggregator).
-  const allTags = useMemo(() => {
-    if (!artists) return [];
-    const counts = new Map<string, { display: string; count: number }>();
-    for (const a of artists) {
-      for (const t of a.tags) {
-        const key = t.toLowerCase();
-        const existing = counts.get(key);
-        if (existing) existing.count++;
-        else counts.set(key, { display: t, count: 1 });
-      }
-    }
-    return [...counts.entries()]
-      .map(([key, v]) => ({ key, display: v.display, count: v.count }))
-      .sort((a, b) => b.count - a.count || a.display.localeCompare(b.display));
-  }, [artists]);
-
   // Pin selected chips to the front so they never get hidden behind the
   // "Show all" collapse; the unselected tail is what actually gets truncated.
   const visibleTags = useMemo(() => {
@@ -97,51 +91,31 @@ export function ArtistsListPage() {
     : Math.max(0, allTags.length - visibleTags.length);
 
   useEffect(() => {
-    api.getArtists().then((data) => { lastArtistCount = data.length; setArtists(data); });
-    api.getEvents().then((events) => {
-      const map = new Map<number, string[]>();
-      for (const event of events) {
-        for (const set of event.artist_sets) {
-          for (const artist of set.artists) {
-            const list = map.get(artist.id) ?? [];
-            list.push(event.name);
-            map.set(artist.id, list);
-          }
-        }
-      }
-      setArtistEvents(map);
+    api.getArtistTagCounts().then(setAllTags);
+    api.getArtistEventNames().then((rows) => {
+      setArtistEvents(new Map(rows.map((r) => [r.id, r.names])));
     });
   }, []);
 
-  const toggleSort = (key: "name" | "count") => {
-    if (sortBy === key) {
+  // Rust owns filter + sort: every change to search / tags / sort re-queries.
+  useEffect(() => {
+    const tags = searchParams.getAll("tag").map((t) => t.toLowerCase());
+    api
+      .queryArtists({ query: search, tags, sortKey, sortDir })
+      .then((data) => {
+        lastArtistCount = data.length;
+        setArtists(data);
+      });
+  }, [search, sortKey, sortDir, searchParams]);
+
+  const toggleSort = (key: EntitySortKey) => {
+    if (sortKey === key) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
-      setSortBy(key);
+      setSortKey(key);
       setSortDir(key === "count" ? "desc" : "asc");
     }
   };
-
-  const filtered = useMemo(() => {
-    if (!artists) return [];
-    const q = search.toLowerCase();
-    let result = artists;
-    if (q) result = result.filter((a) => a.name.toLowerCase().includes(q));
-    // Multiple selected tags compose as OR — click more chips to broaden the
-    // match. AND semantics would be a separate toggle if it turns out to be
-    // what the user actually wants.
-    if (selectedTagKeys.size > 0) {
-      result = result.filter((a) =>
-        a.tags.some((t) => selectedTagKeys.has(t.toLowerCase()))
-      );
-    }
-    return [...result].sort((a, b) => {
-      let cmp = sortBy === "count"
-        ? a.event_count - b.event_count
-        : a.name.replace(/^The\s+/i, "").localeCompare(b.name.replace(/^The\s+/i, ""));
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [artists, search, sortBy, sortDir, selectedTagKeys]);
 
   return (
     <div className="space-y-4">
@@ -227,15 +201,15 @@ export function ArtistsListPage() {
             Array.from({ length: lastArtistCount || 10 }, (_, i) => (
               <SkeletonTableRow key={i} colSpan={4} />
             ))
-          ) : filtered.length === 0 ? (
+          ) : artists.length === 0 ? (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
                 No artists found
               </TableCell>
             </TableRow>
           ) : (() => {
-            const maxCount = Math.max(1, ...filtered.map((a) => a.event_count));
-            return filtered.map((artist, index) => {
+            const maxCount = Math.max(1, ...artists.map((a) => a.event_count));
+            return artists.map((artist, index) => {
               const pct = (artist.event_count / maxCount) * 100;
               return (
                 <TableRow
@@ -299,6 +273,8 @@ export function ArtistDetailPage() {
 
   const [artists, setArtists] = useState<ArtistWithCount[]>([]);
   const [events, setEvents] = useState<EventDetail[]>([]);
+  const [eventsSortKey, setEventsSortKey] = useState<EventSortKey>("date");
+  const [eventsSortDir, setEventsSortDir] = useState<SortDir>("desc");
   const [stats, setStats] = useState<ArtistStats | null>(null);
   const [artistLinks, setArtistLinks] = useState<ArtistLinks | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -311,11 +287,11 @@ export function ArtistDetailPage() {
 
   useEffect(() => {
     if (artistId) {
-      api.getEventsForArtist(artistId).then(setEvents);
+      api.getEventsForArtist(artistId, eventsSortKey, eventsSortDir).then(setEvents);
       api.getArtistLinks(artistId).then(setArtistLinks);
       api.getArtistStats(artistId).then(setStats);
     }
-  }, [artistId]);
+  }, [artistId, eventsSortKey, eventsSortDir]);
 
   const artist = useMemo(
     () => artists.find((a) => a.id === artistId),
@@ -379,7 +355,7 @@ export function ArtistDetailPage() {
           await api.mergeArtists(keepId, mergeId);
           const [refreshedArtists, refreshedEvents] = await Promise.all([
             api.getArtists(),
-            api.getEventsForArtist(keepId),
+            api.getEventsForArtist(keepId, eventsSortKey, eventsSortDir),
           ]);
           setArtists(refreshedArtists);
           setEvents(refreshedEvents);
@@ -462,7 +438,15 @@ export function ArtistDetailPage() {
       )}
 
       {/* Events */}
-      <EventsTable events={events} />
+      <EventsTable
+        events={events}
+        sortKey={eventsSortKey}
+        sortDir={eventsSortDir}
+        onSortChange={(k, d) => {
+          setEventsSortKey(k);
+          setEventsSortDir(d);
+        }}
+      />
 
       <EntityMediaSection eventIds={events.map((e) => e.id)} />
     </div>

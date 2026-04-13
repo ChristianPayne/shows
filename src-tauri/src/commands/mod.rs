@@ -1,4 +1,5 @@
 pub mod events;
+pub mod query;
 pub mod import;
 pub mod export;
 pub mod backup;

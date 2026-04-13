@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import * as api from "@/api";
-import type { EventMedia } from "@/types";
+import type { EventMedia, MediaCounts } from "@/types";
 import { MediaThumbnail } from "@/components/MediaGallery";
 import { MediaViewer } from "@/components/MediaViewer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -25,11 +25,13 @@ interface EventGroup {
 export function MediaPage() {
   const navigate = useNavigate();
   const [media, setMedia] = useState<EventMedia[] | null>(null);
+  const [counts, setCounts] = useState<MediaCounts>({ all: 0, photos: 0, videos: 0 });
   const [filter, setFilter] = useState<MediaFilter>("all");
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   useEffect(() => {
     api.getAllMedia().then(setMedia);
+    api.getMediaCounts().then(setCounts);
   }, []);
 
   const filtered = useMemo(() => {
@@ -64,20 +66,13 @@ export function MediaPage() {
 
   const handleDelete = async (mediaId: number) => {
     await api.deleteEventMedia(mediaId);
-    const refreshed = await api.getAllMedia();
+    const [refreshed, refreshedCounts] = await Promise.all([
+      api.getAllMedia(),
+      api.getMediaCounts(),
+    ]);
     setMedia(refreshed);
+    setCounts(refreshedCounts);
   };
-
-  const counts = useMemo(() => {
-    if (!media) return { all: 0, photos: 0, videos: 0 };
-    let photos = 0;
-    let videos = 0;
-    for (const m of media) {
-      if (isVideoMime(m.mime_type)) videos++;
-      else photos++;
-    }
-    return { all: photos + videos, photos, videos };
-  }, [media]);
 
   return (
     <div className="space-y-4">

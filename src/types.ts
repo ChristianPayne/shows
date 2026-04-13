@@ -1,3 +1,43 @@
+// Shared shapes for the unified query commands (query_events, query_artists,
+// query_venues, query_locations). Serialized snake_case on the wire; Serde
+// lowercases the enum variants so "date" / "asc" etc. match the Rust enums.
+
+export type SortDir = "asc" | "desc";
+
+export type EventSortKey = "date" | "name" | "venue" | "location";
+
+export type EntitySortKey = "name" | "count";
+
+export interface EventsQueryInput {
+  query?: string;
+  sortKey?: EventSortKey;
+  sortDir?: SortDir;
+  limit?: number;
+}
+
+export interface ArtistsQueryInput {
+  query?: string;
+  /** OR semantics — an artist matches if any of its tags is in this list. */
+  tags?: string[];
+  sortKey?: EntitySortKey;
+  sortDir?: SortDir;
+  limit?: number;
+}
+
+export interface VenuesQueryInput {
+  query?: string;
+  sortKey?: EntitySortKey;
+  sortDir?: SortDir;
+  limit?: number;
+}
+
+export interface LocationsQueryInput {
+  query?: string;
+  sortKey?: EntitySortKey;
+  sortDir?: SortDir;
+  limit?: number;
+}
+
 export interface ArtistInfo {
   id: number;
   name: string;
@@ -105,6 +145,53 @@ export interface LocationWithCount {
   city: string;
   state: string;
   event_count: number;
+}
+
+/** Shared shape for list-page tooltip data: one row per entity with at
+ *  least one event, `names` already ordered by date descending. Used by
+ *  the Artists, Venues, and Locations list tooltips. */
+export interface EntityEventNames {
+  id: number;
+  names: string[];
+}
+
+/** Dashboard upcoming-events row. `days_until` is a signed count of calendar
+ *  days from today (local) to the event date — zero means today. The
+ *  display label ("Today" / "Tomorrow" / "In N days") is built on the
+ *  frontend for i18n flexibility. */
+export interface UpcomingEvent {
+  event: EventDetail;
+  days_until: number;
+}
+
+export interface MediaCounts {
+  all: number;
+  photos: number;
+  videos: number;
+}
+
+export interface VenueLocation {
+  city: string;
+  state: string;
+}
+
+/** One entry per distinct (case-insensitive) venue name. `display_name` is
+ *  the first-seen casing; `locations` is every (city, state) pair that name
+ *  exists at. Used by the event form's venue autocomplete — Rust owns the
+ *  case-insensitive dedupe rule so TypeScript can't drift. */
+export interface VenueAutocompleteEntry {
+  display_name: string;
+  locations: VenueLocation[];
+}
+
+/** Aggregated tag-chip entry for the Artists list filter strip. `key` is
+ *  the lowercased form (matches URL params and query_artists tag filter);
+ *  `display` is the first-seen casing; `count` is the number of artists
+ *  carrying this tag. Sorted by count desc, then display asc. */
+export interface TagCount {
+  key: string;
+  display: string;
+  count: number;
 }
 
 export interface Stats {

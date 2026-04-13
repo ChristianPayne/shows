@@ -922,6 +922,240 @@ pub async fn get_events_for_location(
     Ok(events)
 }
 
+// ── Upcoming events (dashboard) ──
+
+pub async fn get_upcoming_events(pool: &SqlitePool) -> Result<Vec<UpcomingEvent>, sqlx::Error> {
+    // Filter + sort in SQL so the dashboard useMemo goes away entirely. The
+    // days_until column is computed server-side via SQLite's julianday so
+    // the result shape is ready to render without any client-side math.
+    // `date('now', 'localtime')` matches what the TS used to do with
+    // `new Date().setHours(0,0,0,0)` — local midnight, not UTC.
+    #[derive(sqlx::FromRow)]
+    struct UpcomingRow {
+        id: i64,
+        name: String,
+        date: String,
+        end_date: Option<String>,
+        cancelled: bool,
+        venue_id: i64,
+        location_id: i64,
+        venue: String,
+        city: String,
+        state: String,
+        days_until: i64,
+    }
+
+    let rows: Vec<UpcomingRow> = sqlx::query_as(
+        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
+                v.name as venue, l.city, l.state,
+                CAST(julianday(e.date) - julianday(date('now', 'localtime')) AS INTEGER) as days_until
+         FROM events e
+         JOIN venues v ON e.venue_id = v.id
+         JOIN locations l ON v.location_id = l.id
+         WHERE e.date >= date('now', 'localtime') AND e.cancelled = 0
+         ORDER BY e.date ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut upcoming = Vec::new();
+    for row in rows {
+        let artist_names: Vec<ArtistInfo> = sqlx::query_as(
+            "SELECT a.id, a.name, ea.set_group FROM artists a
+             JOIN event_artists ea ON a.id = ea.artist_id
+             WHERE ea.event_id = ?1
+             ORDER BY ea.set_group NULLS LAST, a.name",
+        )
+        .bind(row.id)
+        .fetch_all(pool)
+        .await?;
+
+        upcoming.push(UpcomingEvent {
+            event: EventDetail {
+                id: row.id,
+                name: row.name,
+                date: row.date,
+                end_date: row.end_date,
+                cancelled: row.cancelled,
+                venue: row.venue,
+                city: row.city,
+                state: row.state,
+                artist_sets: EventDetail::group_artists(artist_names),
+                venue_id: row.venue_id,
+                location_id: row.location_id,
+            },
+            days_until: row.days_until,
+        });
+    }
+
+    Ok(upcoming)
+}
+
+// ── Venue autocomplete data (event form) ──
+
+pub async fn get_venue_autocomplete(
+    pool: &SqlitePool,
+) -> Result<Vec<VenueAutocompleteEntry>, sqlx::Error> {
+    // Join raw venue rows to their locations, then group by lowercased name
+    // so "The Independent" and "the independent" collapse to one entry
+    // (first-seen casing wins). This was the spot the audit flagged with an
+    // active divergence risk — the EventForm used to re-implement this loop
+    // in TypeScript, and the inline comment literally said "mirrors Rust's
+    // dedupe." Now the rule has exactly one home.
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT v.name, l.city, l.state
+         FROM venues v
+         JOIN locations l ON v.location_id = l.id
+         ORDER BY v.name COLLATE NOCASE, l.state, l.city",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut entries: Vec<VenueAutocompleteEntry> = Vec::new();
+    let mut index_of: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (name, city, state) in rows {
+        let key = name.to_lowercase();
+        if let Some(&idx) = index_of.get(&key) {
+            entries[idx].locations.push(VenueLocation { city, state });
+        } else {
+            index_of.insert(key, entries.len());
+            entries.push(VenueAutocompleteEntry {
+                display_name: name,
+                locations: vec![VenueLocation { city, state }],
+            });
+        }
+    }
+    Ok(entries)
+}
+
+// ── Artist tag chip aggregation (Artists list filter strip) ──
+
+pub async fn get_artist_tag_counts(pool: &SqlitePool) -> Result<Vec<TagCount>, sqlx::Error> {
+    // Walks the same fetch_all_artist_tags data the list query uses, so tag
+    // semantics stay consistent — one tag list per artist, pre-cleaned by
+    // the tags module. Counts are "how many distinct artists carry this
+    // tag", matching the previous TypeScript aggregation this replaced.
+    //
+    // First-seen casing wins for the display name: the iteration order
+    // over the HashMap is non-deterministic, so the "first" here is "first
+    // encountered during this particular call" — good enough for a chip
+    // label, and stable within a single query's result. The same tag ends
+    // up with the same count regardless of which spelling survives.
+    let tag_map = super::tags::fetch_all_artist_tags(pool).await?;
+
+    let mut buckets: std::collections::HashMap<String, (String, i64)> =
+        std::collections::HashMap::new();
+    for (_artist_id, tags) in tag_map {
+        for tag in tags {
+            let key = tag.to_lowercase();
+            buckets
+                .entry(key)
+                .and_modify(|(_, c)| *c += 1)
+                .or_insert((tag, 1));
+        }
+    }
+
+    let mut counts: Vec<TagCount> = buckets
+        .into_iter()
+        .map(|(key, (display, count))| TagCount { key, display, count })
+        .collect();
+
+    // Sort mirrors the old TS order: count desc, display alphabetical on
+    // ties — so the chip strip has a deterministic layout across renders.
+    counts.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.display.cmp(&b.display)));
+    Ok(counts)
+}
+
+// ── Media counts (Media page tab strip) ──
+
+pub async fn get_media_counts(pool: &SqlitePool) -> Result<MediaCounts, sqlx::Error> {
+    // Video rows are whatever has a `video/*` mime type; everything else
+    // counts as a photo. This matches the frontend's `isVideoMime` check,
+    // which uses the same prefix test. One query, two COUNTs — cheap.
+    let (photos, videos): (i64, i64) = sqlx::query_as(
+        "SELECT
+            COUNT(CASE WHEN mime_type NOT LIKE 'video/%' THEN 1 END) as photos,
+            COUNT(CASE WHEN mime_type LIKE 'video/%' THEN 1 END) as videos
+         FROM event_media",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(MediaCounts {
+        all: photos + videos,
+        photos,
+        videos,
+    })
+}
+
+// ── Per-entity event-name aggregation for list tooltips ──
+//
+// The Artists/Venues/Locations list pages render a bar for each row with a
+// hover tooltip showing the event names tied to that row. Before these
+// queries existed, the frontend pulled *every* event via `get_events` and
+// walked the relationships in TypeScript — a lot of data on the wire for
+// a small amount of displayed text, and aggregation logic leaking into a
+// layer that's supposed to be display-only. Now the database does the
+// grouping in one round-trip.
+//
+// `group_event_names` is the one place the grouping actually happens.
+// The three entity-specific functions just vary the SQL.
+
+fn group_event_names(pairs: Vec<(i64, String)>) -> Vec<EntityEventNames> {
+    // Preserves per-id ordering because we iterate in SQL-returned order
+    // (date DESC). HashMap entry insertion order is fine as a side effect —
+    // the frontend turns the result into a lookup map, so the outer Vec's
+    // order is not load-bearing.
+    let mut map: std::collections::HashMap<i64, Vec<String>> = std::collections::HashMap::new();
+    for (id, name) in pairs {
+        map.entry(id).or_default().push(name);
+    }
+    map.into_iter()
+        .map(|(id, names)| EntityEventNames { id, names })
+        .collect()
+}
+
+pub async fn get_artist_event_names(
+    pool: &SqlitePool,
+) -> Result<Vec<EntityEventNames>, sqlx::Error> {
+    // An artist row per (event, set_group) pairing — so if an artist appears
+    // in multiple set_groups of the same event, the event name is listed
+    // twice. That matches the old TypeScript behavior, which walked every
+    // artist slot indiscriminately.
+    let rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT ea.artist_id, e.name
+         FROM event_artists ea
+         JOIN events e ON e.id = ea.event_id
+         ORDER BY e.date DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(group_event_names(rows))
+}
+
+pub async fn get_venue_event_names(
+    pool: &SqlitePool,
+) -> Result<Vec<EntityEventNames>, sqlx::Error> {
+    let rows: Vec<(i64, String)> =
+        sqlx::query_as("SELECT venue_id, name FROM events ORDER BY date DESC")
+            .fetch_all(pool)
+            .await?;
+    Ok(group_event_names(rows))
+}
+
+pub async fn get_location_event_names(
+    pool: &SqlitePool,
+) -> Result<Vec<EntityEventNames>, sqlx::Error> {
+    let rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT v.location_id, e.name
+         FROM events e
+         JOIN venues v ON e.venue_id = v.id
+         ORDER BY e.date DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(group_event_names(rows))
+}
+
 // ── Stats ──
 
 pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {

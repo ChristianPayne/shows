@@ -19,7 +19,13 @@ import { MergeDialog } from "@/components/MergeDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
-import type { VenueWithCount, EventDetail } from "@/types";
+import type {
+  VenueWithCount,
+  EventDetail,
+  EntitySortKey,
+  SortDir,
+  EventSortKey,
+} from "@/types";
 
 let lastVenueCount = 0;
 
@@ -27,49 +33,32 @@ export function VenuesListPage() {
   const navigate = useNavigate();
   const [venues, setVenues] = useState<VenueWithCount[] | null>(null);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "count">("count");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<EntitySortKey>("count");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(new Map());
 
   useEffect(() => {
-    api.getVenues().then((data) => { lastVenueCount = data.length; setVenues(data); });
-    api.getEvents().then((events) => {
-      const map = new Map<number, string[]>();
-      for (const event of events) {
-        const list = map.get(event.venue_id) ?? [];
-        list.push(event.name);
-        map.set(event.venue_id, list);
-      }
-      setVenueEvents(map);
+    api.getVenueEventNames().then((rows) => {
+      setVenueEvents(new Map(rows.map((r) => [r.id, r.names])));
     });
   }, []);
 
-  const toggleSort = (key: "name" | "count") => {
-    if (sortBy === key) {
+  useEffect(() => {
+    api.queryVenues({ query: search, sortKey, sortDir }).then((data) => {
+      lastVenueCount = data.length;
+      setVenues(data);
+    });
+  }, [search, sortKey, sortDir]);
+
+  const toggleSort = (key: EntitySortKey) => {
+    if (sortKey === key) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
-      setSortBy(key);
+      setSortKey(key);
       setSortDir(key === "count" ? "desc" : "asc");
     }
   };
-
-  const filtered = useMemo(() => {
-    if (!venues) return [];
-    const q = search.toLowerCase();
-    let result = venues;
-    if (q) result = result.filter((v) =>
-      v.name.toLowerCase().includes(q) ||
-      v.city.toLowerCase().includes(q) ||
-      v.state.toLowerCase().includes(q)
-    );
-    return [...result].sort((a, b) => {
-      let cmp = sortBy === "count"
-        ? a.event_count - b.event_count
-        : a.name.replace(/^The\s+/i, "").localeCompare(b.name.replace(/^The\s+/i, ""));
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [venues, search, sortBy, sortDir]);
 
   return (
     <div className="space-y-4">
@@ -106,15 +95,15 @@ export function VenuesListPage() {
             Array.from({ length: lastVenueCount || 10 }, (_, i) => (
               <SkeletonTableRow key={i} colSpan={4} />
             ))
-          ) : filtered.length === 0 ? (
+          ) : venues.length === 0 ? (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
                 No venues found
               </TableCell>
             </TableRow>
           ) : (() => {
-            const maxCount = Math.max(1, ...filtered.map((v) => v.event_count));
-            return filtered.map((venue, index) => {
+            const maxCount = Math.max(1, ...venues.map((v) => v.event_count));
+            return venues.map((venue, index) => {
               const pct = (venue.event_count / maxCount) * 100;
               return (
                 <TableRow
@@ -170,6 +159,8 @@ export function VenueDetailPage() {
 
   const [venues, setVenues] = useState<VenueWithCount[]>([]);
   const [events, setEvents] = useState<EventDetail[]>([]);
+  const [eventsSortKey, setEventsSortKey] = useState<EventSortKey>("date");
+  const [eventsSortDir, setEventsSortDir] = useState<SortDir>("desc");
   const [mergeOpen, setMergeOpen] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -178,8 +169,8 @@ export function VenueDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (venueId) api.getEventsForVenue(venueId).then(setEvents);
-  }, [venueId]);
+    if (venueId) api.getEventsForVenue(venueId, eventsSortKey, eventsSortDir).then(setEvents);
+  }, [venueId, eventsSortKey, eventsSortDir]);
 
   const venue = useMemo(
     () => venues.find((v) => v.id === venueId),
@@ -232,13 +223,21 @@ export function VenueDetailPage() {
           await api.mergeVenues(keepId, mergeId);
           const [refreshedVenues, refreshedEvents] = await Promise.all([
             api.getVenues(),
-            api.getEventsForVenue(keepId),
+            api.getEventsForVenue(keepId, eventsSortKey, eventsSortDir),
           ]);
           setVenues(refreshedVenues);
           setEvents(refreshedEvents);
         }}
       />
-      <EventsTable events={events} />
+      <EventsTable
+        events={events}
+        sortKey={eventsSortKey}
+        sortDir={eventsSortDir}
+        onSortChange={(k, d) => {
+          setEventsSortKey(k);
+          setEventsSortDir(d);
+        }}
+      />
       <EntityMediaSection eventIds={events.map((e) => e.id)} />
     </div>
   );

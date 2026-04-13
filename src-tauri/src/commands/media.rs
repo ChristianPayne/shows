@@ -4,7 +4,8 @@ use sqlx::SqlitePool;
 use tauri::{Manager, State};
 use uuid::Uuid;
 
-use crate::db::models::{EventMedia, EventMediaRow};
+use crate::db::models::{EventMedia, EventMediaRow, MediaCounts};
+use crate::db::queries;
 use crate::metadata;
 use crate::util::{event_folder_name, event_folder_path, media_root};
 
@@ -281,6 +282,17 @@ pub async fn get_all_media(
             build_event_media(row, &app_dir, &j.event_name, Some(j.event_date), true)
         })
         .collect())
+}
+
+/// Photo/video totals for the Media page tab strip. One query in Rust is
+/// dramatically less traffic than shipping every media row to the frontend
+/// just to count them — and the classification rule (`video/*` mime) lives
+/// in exactly one place now.
+#[tauri::command]
+pub async fn get_media_counts(pool: State<'_, SqlitePool>) -> Result<MediaCounts, String> {
+    queries::get_media_counts(&pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[derive(sqlx::FromRow)]

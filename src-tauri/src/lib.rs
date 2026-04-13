@@ -6,7 +6,7 @@ mod util;
 
 use std::sync::Mutex;
 
-use commands::{backup, entities, events, export, genres, import, links, maintenance, media, setlists, settings, stats};
+use commands::{backup, entities, events, export, genres, import, links, maintenance, media, query, setlists, settings, stats};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -40,6 +40,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             events::get_events,
+            events::get_upcoming_events,
             events::get_event,
             events::get_artist_context,
             events::create_event,
@@ -48,12 +49,21 @@ pub fn run() {
             events::set_event_cancelled,
             events::delete_event,
             entities::get_artists,
+            entities::get_artist_tag_counts,
             entities::get_artist_stats,
             entities::get_venues,
+            entities::get_venue_autocomplete,
             entities::get_locations,
             entities::get_events_for_artist,
             entities::get_events_for_venue,
             entities::get_events_for_location,
+            entities::get_artist_event_names,
+            entities::get_venue_event_names,
+            entities::get_location_event_names,
+            query::query_events,
+            query::query_artists,
+            query::query_venues,
+            query::query_locations,
             entities::rename_artist,
             entities::rename_venue,
             entities::rename_location,
@@ -82,6 +92,7 @@ pub fn run() {
             media::get_event_media,
             media::get_media_for_events,
             media::get_all_media,
+            media::get_media_counts,
             media::delete_event_media,
             media::update_event_media_caption,
             maintenance::wipe_database,

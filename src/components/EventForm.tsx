@@ -24,7 +24,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import * as api from "@/api";
-import type { EventDetail, CreateEventInput } from "@/types";
+import type { EventDetail, CreateEventInput, VenueLocation } from "@/types";
 
 interface EventFormProps {
   initialData?: EventDetail;
@@ -58,25 +58,19 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
   const [cityNames, setCityNames] = useState<string[]>([]);
   const [stateNames, setStateNames] = useState<string[]>([]);
   const [artistNames, setArtistNames] = useState<string[]>([]);
-  // A venue name can now exist in multiple cities (e.g., "The Independent" in
-  // SF and Austin), so the map is name → list of locations. Picking a venue
-  // only auto-fills the location if it's unambiguous.
-  const [venueLocationMap, setVenueLocationMap] = useState<Map<string, { city: string; state: string }[]>>(new Map());
+  // A venue name can exist in multiple cities (e.g., "The Independent" in SF
+  // and Austin), so the map is lowercased-name → list of locations. Picking
+  // a venue only auto-fills the location if it's unambiguous. Rust's
+  // get_venue_autocomplete owns the case-insensitive dedupe rule — we just
+  // pour its rows into a Map here.
+  const [venueLocationMap, setVenueLocationMap] = useState<Map<string, VenueLocation[]>>(new Map());
 
   useEffect(() => {
-    api.getVenues().then((venues) => {
-      // Distinct venue names for the autocomplete dropdown
-      setVenueNames([...new Set(venues.map((v) => v.name))]);
-      // Keyed by lowercased name so lookups match regardless of how the user
-      // typed the venue — mirrors the case-insensitive dedupe Rust does on save.
-      const map = new Map<string, { city: string; state: string }[]>();
-      for (const v of venues) {
-        const key = v.name.toLowerCase();
-        const list = map.get(key) ?? [];
-        list.push({ city: v.city, state: v.state });
-        map.set(key, list);
-      }
-      setVenueLocationMap(map);
+    api.getVenueAutocomplete().then((entries) => {
+      setVenueNames(entries.map((e) => e.display_name));
+      setVenueLocationMap(
+        new Map(entries.map((e) => [e.display_name.toLowerCase(), e.locations])),
+      );
     });
     api.getLocations().then((l) => {
       setCityNames([...new Set(l.map((x) => x.city))]);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Command } from "cmdk";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -6,12 +6,18 @@ import { Calendar, Mic2, Building2, MapPin } from "lucide-react";
 import * as api from "@/api";
 import type { EventDetail, ArtistWithCount, VenueWithCount, LocationWithCount } from "@/types";
 
+// Rust owns the search + limit pagination for all four entity types. The
+// palette just re-queries on every keystroke — 40 rows max per render, so
+// the round-trip cost is negligible compared to keeping a second copy of
+// the filter rules in TypeScript.
+const RESULT_LIMIT = 10;
+
 export function CommandPalette() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [events, setEvents] = useState<EventDetail[]>([]);
   const [artists, setArtists] = useState<ArtistWithCount[]>([]);
+  const [events, setEvents] = useState<EventDetail[]>([]);
   const [venues, setVenues] = useState<VenueWithCount[]>([]);
   const [locations, setLocations] = useState<LocationWithCount[]>([]);
 
@@ -27,53 +33,31 @@ export function CommandPalette() {
   }, []);
 
   useEffect(() => {
-    if (open) {
-      setSearch("");
-      api.getEvents().then(setEvents);
-      api.getArtists().then(setArtists);
-      api.getVenues().then(setVenues);
-      api.getLocations().then(setLocations);
-    }
+    if (open) setSearch("");
   }, [open]);
 
-  const q = search.toLowerCase();
+  useEffect(() => {
+    if (!open) return;
+    // Fire all four queries in parallel; each one is search-scoped on the
+    // Rust side so we only get back the rows we'll actually render.
+    Promise.all([
+      api.queryArtists({ query: search, limit: RESULT_LIMIT }),
+      api.queryEvents({ query: search, limit: RESULT_LIMIT }),
+      api.queryVenues({ query: search, limit: RESULT_LIMIT }),
+      api.queryLocations({ query: search, limit: RESULT_LIMIT }),
+    ]).then(([a, e, v, l]) => {
+      setArtists(a);
+      setEvents(e);
+      setVenues(v);
+      setLocations(l);
+    });
+  }, [open, search]);
 
-  const filteredArtists = useMemo(() => {
-    if (!q) return artists.slice(0, 10);
-    return artists.filter((a) =>
-      a.name.toLowerCase().includes(q) ||
-      (a.genre ?? "").toLowerCase().includes(q)
-    ).slice(0, 10);
-  }, [artists, q]);
-
-  const filteredEvents = useMemo(() => {
-    if (!q) return events.slice(0, 10);
-    return events.filter((e) =>
-      e.name.toLowerCase().includes(q) ||
-      e.venue.toLowerCase().includes(q) ||
-      e.city.toLowerCase().includes(q) ||
-      e.artist_sets.some((s) => s.artists.some((a) => a.name.toLowerCase().includes(q)))
-    ).slice(0, 10);
-  }, [events, q]);
-
-  const filteredVenues = useMemo(() => {
-    if (!q) return venues.slice(0, 10);
-    return venues.filter((v) =>
-      v.name.toLowerCase().includes(q) ||
-      v.city.toLowerCase().includes(q) ||
-      v.state.toLowerCase().includes(q)
-    ).slice(0, 10);
-  }, [venues, q]);
-
-  const filteredLocations = useMemo(() => {
-    if (!q) return locations.slice(0, 10);
-    return locations.filter((l) =>
-      l.city.toLowerCase().includes(q) || l.state.toLowerCase().includes(q)
-    ).slice(0, 10);
-  }, [locations, q]);
-
-  const noResults = filteredArtists.length === 0 && filteredEvents.length === 0 &&
-    filteredVenues.length === 0 && filteredLocations.length === 0;
+  const noResults =
+    artists.length === 0 &&
+    events.length === 0 &&
+    venues.length === 0 &&
+    locations.length === 0;
 
   const go = (path: string) => {
     navigate(path);
@@ -99,9 +83,9 @@ export function CommandPalette() {
               </Command.Empty>
             )}
 
-            {filteredArtists.length > 0 && (
+            {artists.length > 0 && (
               <Command.Group heading="Artists">
-                {filteredArtists.map((artist) => (
+                {artists.map((artist) => (
                   <Command.Item
                     key={`artist-${artist.id}`}
                     onSelect={() => go(`/artists/${artist.id}`)}
@@ -117,9 +101,9 @@ export function CommandPalette() {
               </Command.Group>
             )}
 
-            {filteredEvents.length > 0 && (
+            {events.length > 0 && (
               <Command.Group heading="Events">
-                {filteredEvents.map((event) => (
+                {events.map((event) => (
                   <Command.Item
                     key={`event-${event.id}`}
                     onSelect={() => go(`/events/${event.id}`)}
@@ -135,9 +119,9 @@ export function CommandPalette() {
               </Command.Group>
             )}
 
-            {filteredVenues.length > 0 && (
+            {venues.length > 0 && (
               <Command.Group heading="Venues">
-                {filteredVenues.map((venue) => (
+                {venues.map((venue) => (
                   <Command.Item
                     key={`venue-${venue.id}`}
                     onSelect={() => go(`/venues/${venue.id}`)}
@@ -153,9 +137,9 @@ export function CommandPalette() {
               </Command.Group>
             )}
 
-            {filteredLocations.length > 0 && (
+            {locations.length > 0 && (
               <Command.Group heading="Locations">
-                {filteredLocations.map((loc) => (
+                {locations.map((loc) => (
                   <Command.Item
                     key={`location-${loc.id}`}
                     onSelect={() => go(`/locations/${loc.id}`)}

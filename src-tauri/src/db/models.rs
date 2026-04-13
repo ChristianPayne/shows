@@ -232,6 +232,68 @@ pub struct LocationWithCount {
     pub event_count: i64,
 }
 
+/// Per-entity list of event names used only by the list-page tooltip bars.
+/// Aggregated in Rust so the frontend doesn't have to pull every event just
+/// to walk the relationships itself — see `queries::get_*_event_names`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityEventNames {
+    pub id: i64,
+    pub names: Vec<String>,
+}
+
+/// A not-yet-attended event plus the relative-time value used by the
+/// dashboard. Wrapping `EventDetail` (rather than adding a `days_until`
+/// field to it) keeps the main shape clean — "days until" is only
+/// meaningful for upcoming rows.
+///
+/// `days_until` is a signed count of calendar days from today (local) to
+/// the event date. Zero means today, one means tomorrow. The frontend
+/// owns the eventual string label so i18n stays on the display side.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpcomingEvent {
+    pub event: EventDetail,
+    pub days_until: i64,
+}
+
+/// Photo/video counts for the Media page tab strip. Kept as a tiny
+/// dedicated shape rather than returning a generic map so serde generates
+/// a nice TS interface without a `Record<string, number>`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaCounts {
+    pub all: i64,
+    pub photos: i64,
+    pub videos: i64,
+}
+
+/// A venue name grouped with the list of locations that name appears at.
+/// Case-insensitive deduplication happens server-side so the EventForm
+/// autocomplete doesn't re-implement the rule in TypeScript. `display_name`
+/// is the first-seen casing, mirroring the policy used by the top-genres
+/// aggregator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VenueAutocompleteEntry {
+    pub display_name: String,
+    pub locations: Vec<VenueLocation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VenueLocation {
+    pub city: String,
+    pub state: String,
+}
+
+/// Aggregated tag chip data for the Artists list filter strip. `key` is the
+/// lowercased form used for matching (matches the URL query param and the
+/// `query_artists` tag filter). `display` is the first-seen casing — same
+/// policy as the top-genres aggregator. `count` is the number of distinct
+/// artists that carry this tag.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagCount {
+    pub key: String,
+    pub display: String,
+    pub count: i64,
+}
+
 /// A media file (image or video) attached to an event. The on-disk path is
 /// computed at read time from the event's current name + id and the stored
 /// `filename`; we don't persist the absolute path because the event folder

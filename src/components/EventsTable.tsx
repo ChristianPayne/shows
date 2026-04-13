@@ -1,4 +1,3 @@
-import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Table,
@@ -10,72 +9,45 @@ import {
 } from "@/components/ui/table";
 import { ArtistBadgeList, EntityLink } from "@/components/EntityLink";
 import { ArrowUpDown } from "lucide-react";
-import type { EventDetail } from "@/types";
+import type { EventDetail, EventSortKey, SortDir } from "@/types";
+
+// EventsTable is purely presentational — it never filters or sorts. The
+// parent fetches pre-sorted events from Rust (query_events or one of the
+// get_events_for_* commands) and passes them in along with the current
+// sort state. Column clicks emit `onSortChange`; the parent decides
+// whether to re-fetch.
 
 interface EventsTableProps {
   events: EventDetail[];
-  search?: string;
+  sortKey: EventSortKey;
+  sortDir: SortDir;
+  onSortChange: (key: EventSortKey, dir: SortDir) => void;
 }
 
-type SortKey = "date" | "name" | "venue" | "location";
-type SortDir = "asc" | "desc";
-
-export function EventsTable({ events, search = "" }: EventsTableProps) {
+export function EventsTable({
+  events,
+  sortKey,
+  sortDir,
+  onSortChange,
+}: EventsTableProps) {
   const navigate = useNavigate();
-  const [sortKey, setSortKey] = useState<SortKey>("date");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
+  const toggleSort = (key: EventSortKey) => {
+    if (key === sortKey) {
+      onSortChange(key, sortDir === "asc" ? "desc" : "asc");
     } else {
-      setSortKey(key);
-      setSortDir(key === "date" ? "desc" : "asc");
+      // Date defaults to descending (newest first); other columns default
+      // to ascending so an A→Z click doesn't surprise the user with Z→A.
+      onSortChange(key, key === "date" ? "desc" : "asc");
     }
   };
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    if (!q) return events;
-    return events.filter(
-      (e) =>
-        e.name.toLowerCase().includes(q) ||
-        e.venue.toLowerCase().includes(q) ||
-        e.city.toLowerCase().includes(q) ||
-        e.state.toLowerCase().includes(q) ||
-        e.artist_sets.some((s) => s.artists.some((a) => a.name.toLowerCase().includes(q)))
-    );
-  }, [events, search]);
-
-  const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "date":
-          cmp = a.date.localeCompare(b.date);
-          break;
-        case "name":
-          cmp = stripArticle(a.name).localeCompare(stripArticle(b.name));
-          break;
-        case "venue":
-          cmp = stripArticle(a.venue).localeCompare(stripArticle(b.venue));
-          break;
-        case "location":
-          cmp = `${a.state}, ${a.city}`.localeCompare(
-            `${b.state}, ${b.city}`
-          );
-          break;
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [filtered, sortKey, sortDir]);
 
   const SortHeader = ({
     label,
     sortKeyName,
   }: {
     label: string;
-    sortKeyName: SortKey;
+    sortKeyName: EventSortKey;
   }) => (
     <TableHead
       className="cursor-pointer select-none hover:text-foreground transition-colors"
@@ -101,14 +73,14 @@ export function EventsTable({ events, search = "" }: EventsTableProps) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {sorted.length === 0 ? (
+        {events.length === 0 ? (
           <TableRow>
             <TableCell colSpan={6} className="text-center text-muted-foreground">
               No events found
             </TableCell>
           </TableRow>
         ) : (
-          sorted.map((event, index) => (
+          events.map((event, index) => (
             <TableRow
               key={event.id}
               className={`cursor-pointer ${event.cancelled ? "opacity-50" : ""}`}
@@ -146,10 +118,6 @@ export function EventsTable({ events, search = "" }: EventsTableProps) {
       </TableBody>
     </Table>
   );
-}
-
-function stripArticle(name: string): string {
-  return name.replace(/^The\s+/i, "");
 }
 
 function formatDate(dateStr: string): string {

@@ -1,6 +1,13 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type {
+  EntityEventNames,
   EventDetail,
+  EventSortKey,
+  MediaCounts,
+  SortDir,
+  TagCount,
+  UpcomingEvent,
+  VenueAutocompleteEntry,
   VenueWithCount,
   LocationWithCount,
   Stats,
@@ -15,11 +22,18 @@ import type {
   MusicBrainzMatch,
   EventMedia,
   PreviewRow,
+  EventsQueryInput,
+  ArtistsQueryInput,
+  VenuesQueryInput,
+  LocationsQueryInput,
 } from "./types";
 
 // ── Events ──
 
 export const getEvents = () => invoke<EventDetail[]>("get_events");
+
+export const getUpcomingEvents = () =>
+  invoke<UpcomingEvent[]>("get_upcoming_events");
 
 export const getEvent = (eventId: number) =>
   invoke<EventDetail | null>("get_event", { eventId });
@@ -46,6 +60,9 @@ export const deleteEvent = (eventId: number) =>
 
 export const getArtists = () => invoke<ArtistWithCount[]>("get_artists");
 
+export const getArtistTagCounts = () =>
+  invoke<TagCount[]>("get_artist_tag_counts");
+
 export const getArtistStats = (artistId: number) =>
   invoke<ArtistStats>("get_artist_stats", { artistId });
 
@@ -54,17 +71,54 @@ export const getArtistLinks = (artistId: number) =>
 
 export const getVenues = () => invoke<VenueWithCount[]>("get_venues");
 
+export const getVenueAutocomplete = () =>
+  invoke<VenueAutocompleteEntry[]>("get_venue_autocomplete");
+
 export const getLocations = () =>
   invoke<LocationWithCount[]>("get_locations");
 
-export const getEventsForArtist = (artistId: number) =>
-  invoke<EventDetail[]>("get_events_for_artist", { artistId });
+export const getEventsForArtist = (
+  artistId: number,
+  sortKey?: EventSortKey,
+  sortDir?: SortDir,
+) => invoke<EventDetail[]>("get_events_for_artist", { artistId, sortKey, sortDir });
 
-export const getEventsForVenue = (venueId: number) =>
-  invoke<EventDetail[]>("get_events_for_venue", { venueId });
+export const getEventsForVenue = (
+  venueId: number,
+  sortKey?: EventSortKey,
+  sortDir?: SortDir,
+) => invoke<EventDetail[]>("get_events_for_venue", { venueId, sortKey, sortDir });
 
-export const getEventsForLocation = (locationId: number) =>
-  invoke<EventDetail[]>("get_events_for_location", { locationId });
+export const getEventsForLocation = (
+  locationId: number,
+  sortKey?: EventSortKey,
+  sortDir?: SortDir,
+) => invoke<EventDetail[]>("get_events_for_location", { locationId, sortKey, sortDir });
+
+// ── Aggregated event-name lookups for list-page tooltips ──
+
+export const getArtistEventNames = () =>
+  invoke<EntityEventNames[]>("get_artist_event_names");
+
+export const getVenueEventNames = () =>
+  invoke<EntityEventNames[]>("get_venue_event_names");
+
+export const getLocationEventNames = () =>
+  invoke<EntityEventNames[]>("get_location_event_names");
+
+// ── Unified query commands (search + filter + sort in Rust) ──
+
+export const queryEvents = (input: EventsQueryInput = {}) =>
+  invoke<EventDetail[]>("query_events", { input });
+
+export const queryArtists = (input: ArtistsQueryInput = {}) =>
+  invoke<ArtistWithCount[]>("query_artists", { input });
+
+export const queryVenues = (input: VenuesQueryInput = {}) =>
+  invoke<VenueWithCount[]>("query_venues", { input });
+
+export const queryLocations = (input: LocationsQueryInput = {}) =>
+  invoke<LocationWithCount[]>("query_locations", { input });
 
 export const renameArtist = (artistId: number, name: string) =>
   invoke<void>("rename_artist", { artistId, name });
@@ -159,6 +213,8 @@ export const getMediaForEvents = (eventIds: number[]) =>
   invoke<EventMedia[]>("get_media_for_events", { eventIds });
 
 export const getAllMedia = () => invoke<EventMedia[]>("get_all_media");
+
+export const getMediaCounts = () => invoke<MediaCounts>("get_media_counts");
 
 export const addEventMedia = (eventId: number, sourcePath: string) =>
   invoke<EventMedia>("add_event_media", { eventId, sourcePath });

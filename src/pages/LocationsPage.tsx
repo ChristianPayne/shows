@@ -19,7 +19,13 @@ import { MergeDialog } from "@/components/MergeDialog";
 import { EditableLocation } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import * as api from "@/api";
-import type { LocationWithCount, EventDetail } from "@/types";
+import type {
+  LocationWithCount,
+  EventDetail,
+  EntitySortKey,
+  SortDir,
+  EventSortKey,
+} from "@/types";
 
 let lastLocationCount = 0;
 
@@ -27,47 +33,32 @@ export function LocationsListPage() {
   const navigate = useNavigate();
   const [locations, setLocations] = useState<LocationWithCount[] | null>(null);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "count">("count");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<EntitySortKey>("count");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const [locationEvents, setLocationEvents] = useState<Map<number, string[]>>(new Map());
 
   useEffect(() => {
-    api.getLocations().then((data) => { lastLocationCount = data.length; setLocations(data); });
-    api.getEvents().then((events) => {
-      const map = new Map<number, string[]>();
-      for (const event of events) {
-        const list = map.get(event.location_id) ?? [];
-        list.push(event.name);
-        map.set(event.location_id, list);
-      }
-      setLocationEvents(map);
+    api.getLocationEventNames().then((rows) => {
+      setLocationEvents(new Map(rows.map((r) => [r.id, r.names])));
     });
   }, []);
 
-  const toggleSort = (key: "name" | "count") => {
-    if (sortBy === key) {
+  useEffect(() => {
+    api.queryLocations({ query: search, sortKey, sortDir }).then((data) => {
+      lastLocationCount = data.length;
+      setLocations(data);
+    });
+  }, [search, sortKey, sortDir]);
+
+  const toggleSort = (key: EntitySortKey) => {
+    if (sortKey === key) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
-      setSortBy(key);
+      setSortKey(key);
       setSortDir(key === "count" ? "desc" : "asc");
     }
   };
-
-  const filtered = useMemo(() => {
-    if (!locations) return [];
-    const q = search.toLowerCase();
-    let result = locations;
-    if (q) result = result.filter(
-      (l) => l.city.toLowerCase().includes(q) || l.state.toLowerCase().includes(q)
-    );
-    return [...result].sort((a, b) => {
-      let cmp = sortBy === "count"
-        ? a.event_count - b.event_count
-        : `${a.state}, ${a.city}`.localeCompare(`${b.state}, ${b.city}`);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [locations, search, sortBy, sortDir]);
 
   return (
     <div className="space-y-4">
@@ -104,15 +95,15 @@ export function LocationsListPage() {
             Array.from({ length: lastLocationCount || 10 }, (_, i) => (
               <SkeletonTableRow key={i} colSpan={4} />
             ))
-          ) : filtered.length === 0 ? (
+          ) : locations.length === 0 ? (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
                 No locations found
               </TableCell>
             </TableRow>
           ) : (() => {
-            const maxCount = Math.max(1, ...filtered.map((l) => l.event_count));
-            return filtered.map((loc, index) => {
+            const maxCount = Math.max(1, ...locations.map((l) => l.event_count));
+            return locations.map((loc, index) => {
               const pct = (loc.event_count / maxCount) * 100;
               return (
                 <TableRow
@@ -165,6 +156,8 @@ export function LocationDetailPage() {
 
   const [locations, setLocations] = useState<LocationWithCount[]>([]);
   const [events, setEvents] = useState<EventDetail[]>([]);
+  const [eventsSortKey, setEventsSortKey] = useState<EventSortKey>("date");
+  const [eventsSortDir, setEventsSortDir] = useState<SortDir>("desc");
   const [mergeOpen, setMergeOpen] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -173,8 +166,9 @@ export function LocationDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (locationId) api.getEventsForLocation(locationId).then(setEvents);
-  }, [locationId]);
+    if (locationId)
+      api.getEventsForLocation(locationId, eventsSortKey, eventsSortDir).then(setEvents);
+  }, [locationId, eventsSortKey, eventsSortDir]);
 
   const location = useMemo(
     () => locations.find((l) => l.id === locationId),
@@ -228,13 +222,21 @@ export function LocationDetailPage() {
           await api.mergeLocations(keepId, mergeId);
           const [refreshedLocations, refreshedEvents] = await Promise.all([
             api.getLocations(),
-            api.getEventsForLocation(keepId),
+            api.getEventsForLocation(keepId, eventsSortKey, eventsSortDir),
           ]);
           setLocations(refreshedLocations);
           setEvents(refreshedEvents);
         }}
       />
-      <EventsTable events={events} />
+      <EventsTable
+        events={events}
+        sortKey={eventsSortKey}
+        sortDir={eventsSortDir}
+        onSortChange={(k, d) => {
+          setEventsSortKey(k);
+          setEventsSortDir(d);
+        }}
+      />
       <EntityMediaSection eventIds={events.map((e) => e.id)} />
     </div>
   );

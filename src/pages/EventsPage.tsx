@@ -6,20 +6,31 @@ import { EventDetailView } from "@/components/EventDetail";
 import { EventForm } from "@/components/EventForm";
 import { SkeletonTableRow } from "@/components/Skeleton";
 import * as api from "@/api";
-import type { EventDetail, CreateEventInput } from "@/types";
+import type {
+  EventDetail,
+  CreateEventInput,
+  EventSortKey,
+  SortDir,
+} from "@/types";
 
 let lastEventCount = 0;
 
 export function EventsListPage() {
   const [events, setEvents] = useState<EventDetail[] | null>(null);
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<EventSortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   useEffect(() => {
-    api.getEvents().then((data) => {
+    // Rust owns the search/filter/sort — every edit to the input and every
+    // column click re-queries the backend. Personal-scale data, so a full
+    // round-trip per keystroke is fine and avoids any drift between the
+    // two codebases about how matching / ordering should work.
+    api.queryEvents({ query: search, sortKey, sortDir }).then((data) => {
       lastEventCount = data.length;
       setEvents(data);
     });
-  }, []);
+  }, [search, sortKey, sortDir]);
 
   return (
     <div className="space-y-4">
@@ -33,7 +44,15 @@ export function EventsListPage() {
         />
       </div>
       {events ? (
-        <EventsTable events={events} search={search} />
+        <EventsTable
+          events={events}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSortChange={(k, d) => {
+            setSortKey(k);
+            setSortDir(d);
+          }}
+        />
       ) : (
         <table className="w-full">
           <tbody>

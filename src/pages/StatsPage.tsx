@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { GenresRadar } from "@/components/GenresRadar";
 import * as api from "@/api";
-import type { Stats, EventDetail } from "@/types";
+import type { Stats, UpcomingEvent } from "@/types";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -14,22 +14,14 @@ const MONTH_NAMES = [
 export function StatsPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [events, setEvents] = useState<EventDetail[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingEvent[]>([]);
 
   useEffect(() => {
-    Promise.all([api.getStats(), api.getEvents()]).then(([s, e]) => {
+    Promise.all([api.getStats(), api.getUpcomingEvents()]).then(([s, u]) => {
       setStats(s);
-      setEvents(e);
+      setUpcoming(u);
     });
   }, []);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const upcoming = useMemo(
-    () => events
-      .filter((e) => e.date >= today && !e.cancelled)
-      .sort((a, b) => a.date.localeCompare(b.date)),
-    [events, today]
-  );
 
   if (!stats) {
     return <p className="text-muted-foreground">Loading dashboard...</p>;
@@ -52,7 +44,7 @@ export function StatsPage() {
           <div>
             <h2 className="text-lg font-semibold mb-3">Upcoming</h2>
             <div className="space-y-2">
-              {upcoming.map((event) => (
+              {upcoming.map(({ event, days_until }) => (
                 <Link
                   key={event.id}
                   to={`/events/${event.id}`}
@@ -69,7 +61,7 @@ export function StatsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-medium">{event.name}</p>
-                      <span className="text-xs text-muted-foreground">{getDaysUntil(event.date)}</span>
+                      <span className="text-xs text-muted-foreground">{formatDaysUntil(days_until)}</span>
                     </div>
                     <p className="text-sm text-muted-foreground">{event.venue} — {event.city}, {event.state}</p>
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -234,11 +226,7 @@ function BarRow({
   return <div className="py-0.5">{content}</div>;
 }
 
-function getDaysUntil(dateStr: string): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const eventDate = new Date(dateStr + "T00:00:00");
-  const days = Math.ceil((eventDate.getTime() - today.getTime()) / 86400000);
+function formatDaysUntil(days: number): string {
   if (days === 0) return "Today";
   if (days === 1) return "Tomorrow";
   return `In ${days} days`;

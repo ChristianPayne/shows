@@ -3,7 +3,7 @@ use tauri::{Manager, State};
 
 use crate::commands::genres;
 use crate::commands::media;
-use crate::db::models::{ArtistContextSet, EventDetail};
+use crate::db::models::{ArtistContextSet, EventDetail, UpcomingEvent};
 use crate::db::queries;
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -75,6 +75,15 @@ pub struct CreateEventInput {
 #[tauri::command]
 pub async fn get_events(pool: State<'_, SqlitePool>) -> Result<Vec<EventDetail>, String> {
     queries::get_all_events(&pool).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_upcoming_events(
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<UpcomingEvent>, String> {
+    queries::get_upcoming_events(&pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
