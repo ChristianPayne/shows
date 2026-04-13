@@ -18,6 +18,7 @@ import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { ACCENT_PRESETS } from "@/lib/accent";
 import { CsvPreviewDialog } from "@/components/CsvPreviewDialog";
+import { useUpdater } from "@/hooks/useUpdater";
 import * as api from "@/api";
 import type { ImportResult, PreviewRow } from "@/types";
 
@@ -30,8 +31,7 @@ interface SettingsPageProps {
 
 export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: SettingsPageProps) {
   const [fetchingGenres, setFetchingGenres] = useState(false);
-  const [updateMsg, setUpdateMsg] = useState("");
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const updater = useUpdater();
   const [setlistfmKey, setSetlistfmKey] = useState("");
 
   useEffect(() => {
@@ -39,24 +39,6 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
       setSetlistfmKey(value ?? "");
     });
   }, []);
-
-  const handleCheckUpdate = async () => {
-    setCheckingUpdate(true);
-    setUpdateMsg("");
-    try {
-      const meta = await api.fetchUpdate();
-      if (meta) {
-        setUpdateMsg(
-          `Update available: v${meta.version} (current v${meta.currentVersion}). See the banner at the top of the window to install.`,
-        );
-      } else {
-        setUpdateMsg("You're on the latest version.");
-      }
-    } catch (err) {
-      setUpdateMsg(`Update check failed: ${err}`);
-    }
-    setCheckingUpdate(false);
-  };
 
   useEffect(() => {
     const unlisten = listen<{ done: boolean }>("genre-progress", (event) => {
@@ -386,19 +368,66 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Updates</h2>
         <div className="rounded-lg border divide-y">
-          <button
-            className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-            disabled={checkingUpdate}
-            onClick={handleCheckUpdate}
-          >
-            <RefreshCcw className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <div className="text-left">
-              <p className="font-medium">{checkingUpdate ? "Checking..." : "Check for Updates"}</p>
-              <p className="text-xs text-muted-foreground">Look for a newer published release on GitHub</p>
-            </div>
-          </button>
+          {updater.phase.kind === "available" ? (
+            <button
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors"
+              onClick={updater.install}
+            >
+              <Download className="h-4 w-4 shrink-0 text-primary" />
+              <div className="text-left">
+                <p className="font-medium">Install & Restart</p>
+                <p className="text-xs text-muted-foreground">
+                  v{updater.phase.meta.version} available (current v{updater.phase.meta.currentVersion})
+                </p>
+              </div>
+            </button>
+          ) : (
+            <button
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              disabled={
+                updater.phase.kind === "checking" ||
+                updater.phase.kind === "downloading" ||
+                updater.phase.kind === "finished"
+              }
+              onClick={updater.check}
+            >
+              <RefreshCcw className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="text-left">
+                <p className="font-medium">
+                  {updater.phase.kind === "checking"
+                    ? "Checking..."
+                    : updater.phase.kind === "downloading"
+                      ? "Downloading..."
+                      : updater.phase.kind === "finished"
+                        ? "Restarting..."
+                        : "Check for Updates"}
+                </p>
+                <p className="text-xs text-muted-foreground">Look for a newer published release on GitHub</p>
+              </div>
+            </button>
+          )}
         </div>
-        {updateMsg && <p className="text-sm text-muted-foreground">{updateMsg}</p>}
+        {updater.phase.kind === "upToDate" && (
+          <p className="text-sm text-muted-foreground">You're on the latest version.</p>
+        )}
+        {updater.phase.kind === "downloading" && (
+          <p className="text-sm text-muted-foreground">
+            Downloading update…
+            {updater.phase.total
+              ? ` ${Math.round((updater.phase.received / updater.phase.total) * 100)}%`
+              : ` ${(updater.phase.received / 1024 / 1024).toFixed(1)} MB`}
+          </p>
+        )}
+        {updater.phase.kind === "finished" && (
+          <p className="text-sm text-muted-foreground">Restarting to apply update…</p>
+        )}
+        {updater.phase.kind === "error" && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Update Failed</AlertTitle>
+            <AlertDescription>{updater.phase.message}</AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <Separator />

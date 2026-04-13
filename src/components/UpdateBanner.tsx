@@ -1,54 +1,26 @@
 import { useEffect, useState } from "react";
-import { relaunch } from "@tauri-apps/plugin-process";
 import { Download, X } from "lucide-react";
-import * as api from "@/api";
-import type { UpdateMetadata, DownloadEvent } from "@/api";
-
-type Phase =
-  | { kind: "idle" }
-  | { kind: "available"; meta: UpdateMetadata }
-  | { kind: "downloading"; received: number; total: number | null }
-  | { kind: "finished" }
-  | { kind: "error"; message: string };
+import { useUpdater } from "@/hooks/useUpdater";
 
 export function UpdateBanner() {
-  const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const { phase, checkSilent, install } = useUpdater();
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    api
-      .fetchUpdate()
-      .then((meta) => {
-        if (meta) setPhase({ kind: "available", meta });
-      })
-      .catch(() => {
-        // Silent on startup — the manual Settings button surfaces errors.
-      });
-  }, []);
+    checkSilent();
+  }, [checkSilent]);
 
-  if (dismissed || phase.kind === "idle") return null;
+  // The banner surfaces the auto-check result and anything that follows from
+  // clicking its Install button. Idle/checking/upToDate are Settings-only
+  // phases — checkSilent leaves phase at idle on failure, so the banner never
+  // reacts to the silent startup check unless an update is actually available.
+  const visible =
+    phase.kind === "available" ||
+    phase.kind === "downloading" ||
+    phase.kind === "finished" ||
+    phase.kind === "error";
 
-  const handleInstall = async () => {
-    setPhase({ kind: "downloading", received: 0, total: null });
-    try {
-      await api.installUpdate((e: DownloadEvent) => {
-        if (e.event === "Started") {
-          setPhase({ kind: "downloading", received: 0, total: e.data.contentLength });
-        } else if (e.event === "Progress") {
-          setPhase((prev) =>
-            prev.kind === "downloading"
-              ? { ...prev, received: prev.received + e.data.chunkLength }
-              : prev,
-          );
-        } else if (e.event === "Finished") {
-          setPhase({ kind: "finished" });
-        }
-      });
-      await relaunch();
-    } catch (err) {
-      setPhase({ kind: "error", message: String(err) });
-    }
-  };
+  if (dismissed || !visible) return null;
 
   return (
     <div className="flex items-center gap-3 border-b bg-primary/10 px-4 py-2 text-sm">
@@ -75,7 +47,7 @@ export function UpdateBanner() {
       </div>
       {phase.kind === "available" && (
         <button
-          onClick={handleInstall}
+          onClick={install}
           className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
         >
           Install & restart
