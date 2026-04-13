@@ -210,7 +210,10 @@ pub struct VenueWithCount {
     pub state: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+/// `tags` is a cleaned list (trimmed, non-empty) rather than the raw CSV so
+/// the frontend can filter and render without re-parsing. Source-agnostic —
+/// see `db::tags` for the future custom-tag merge point.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtistWithCount {
     pub id: i64,
     pub name: String,
@@ -218,6 +221,7 @@ pub struct ArtistWithCount {
     pub genre: Option<String>,
     pub country: Option<String>,
     pub artist_type: Option<String>,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

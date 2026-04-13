@@ -97,6 +97,7 @@ export interface ArtistWithCount {
   genre: string | null;
   country: string | null;
   artist_type: string | null;
+  tags: string[];
 }
 
 export interface LocationWithCount {

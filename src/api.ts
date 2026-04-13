@@ -158,6 +158,8 @@ export const getEventMedia = (eventId: number) =>
 export const getMediaForEvents = (eventIds: number[]) =>
   invoke<EventMedia[]>("get_media_for_events", { eventIds });
 
+export const getAllMedia = () => invoke<EventMedia[]>("get_all_media");
+
 export const addEventMedia = (eventId: number, sourcePath: string) =>
   invoke<EventMedia>("add_event_media", { eventId, sourcePath });
 

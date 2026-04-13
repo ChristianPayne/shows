@@ -241,6 +241,48 @@ pub async fn get_media_for_events(
         .collect())
 }
 
+/// Every media item across every event, for the top-level Media tab. Shares
+/// `get_media_for_events`'s JOIN shape (event name + date populated), and
+/// matches its sort so the Media tab groups naturally by event in the same
+/// order per-event galleries render internally. Intentionally unpaginated —
+/// a personal tracker with a few hundred items renders fine, and streaming
+/// adds complexity we don't need yet.
+#[tauri::command]
+pub async fn get_all_media(
+    pool: State<'_, SqlitePool>,
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<EventMedia>, String> {
+    let app_dir = app_data_dir(&app_handle)?;
+
+    let rows: Vec<JoinedMediaRow> = sqlx::query_as(
+        "SELECT m.id, m.event_id, m.filename, m.mime_type, m.file_size, m.caption, m.created_at, m.captured_at, \
+                e.name AS event_name, e.date AS event_date \
+         FROM event_media m \
+         JOIN events e ON e.id = m.event_id \
+         ORDER BY e.date DESC, m.captured_at IS NULL, m.captured_at ASC, m.created_at ASC",
+    )
+    .fetch_all(pool.inner())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(rows
+        .into_iter()
+        .map(|j| {
+            let row = EventMediaRow {
+                id: j.id,
+                event_id: j.event_id,
+                filename: j.filename,
+                mime_type: j.mime_type,
+                file_size: j.file_size,
+                caption: j.caption,
+                created_at: j.created_at,
+                captured_at: j.captured_at,
+            };
+            build_event_media(row, &app_dir, &j.event_name, Some(j.event_date), true)
+        })
+        .collect())
+}
+
 #[derive(sqlx::FromRow)]
 struct JoinedMediaRow {
     id: i64,

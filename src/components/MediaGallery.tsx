@@ -211,7 +211,7 @@ export function MediaGallery({
  *  offset and paints it to the element — effectively a "poster frame" at
  *  zero marginal cost. We pick 0.1s instead of 0 because many iPhone videos
  *  have a black first frame while the sensor warms up. */
-function MediaThumbnail({
+export function MediaThumbnail({
   item,
   selectionMode,
   selected,

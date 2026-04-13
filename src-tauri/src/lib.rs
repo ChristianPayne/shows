@@ -81,6 +81,7 @@ pub fn run() {
             media::add_event_media,
             media::get_event_media,
             media::get_media_for_events,
+            media::get_all_media,
             media::delete_event_media,
             media::update_event_media_caption,
             maintenance::wipe_database,

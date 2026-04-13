@@ -24,8 +24,12 @@ pub async fn find_or_create_location(
     city: &str,
     state: &str,
 ) -> Result<i64, sqlx::Error> {
+    // NOCASE so "San Francisco" / "san francisco" map to the same location
+    // instead of creating duplicates. The UNIQUE(city, state) constraint stays
+    // binary — we dedupe before insert so the constraint never fires on a
+    // case-variant, and pre-existing case-variant rows keep working.
     let row: Option<(i64,)> =
-        sqlx::query_as("SELECT id FROM locations WHERE city = ?1 AND state = ?2")
+        sqlx::query_as("SELECT id FROM locations WHERE city = ?1 COLLATE NOCASE AND state = ?2 COLLATE NOCASE")
             .bind(city)
             .bind(state)
             .fetch_optional(pool)
@@ -52,7 +56,7 @@ pub async fn find_or_create_venue(
     location_id: i64,
 ) -> Result<i64, sqlx::Error> {
     let row: Option<(i64,)> =
-        sqlx::query_as("SELECT id FROM venues WHERE name = ?1 AND location_id = ?2")
+        sqlx::query_as("SELECT id FROM venues WHERE name = ?1 COLLATE NOCASE AND location_id = ?2")
             .bind(name)
             .bind(location_id)
             .fetch_optional(pool)
@@ -77,7 +81,7 @@ pub async fn find_venues_by_name(
     pool: &SqlitePool,
     name: &str,
 ) -> Result<Vec<(i64, i64)>, sqlx::Error> {
-    sqlx::query_as("SELECT id, location_id FROM venues WHERE name = ?1")
+    sqlx::query_as("SELECT id, location_id FROM venues WHERE name = ?1 COLLATE NOCASE")
         .bind(name)
         .fetch_all(pool)
         .await
@@ -93,7 +97,7 @@ pub async fn find_venues_with_location_by_name(
     sqlx::query_as(
         "SELECT v.id, v.location_id, l.city, l.state \
          FROM venues v JOIN locations l ON l.id = v.location_id \
-         WHERE v.name = ?1",
+         WHERE v.name = ?1 COLLATE NOCASE",
     )
     .bind(name)
     .fetch_all(pool)
@@ -109,7 +113,7 @@ pub async fn find_location(
     state: &str,
 ) -> Result<Option<i64>, sqlx::Error> {
     let row: Option<(i64,)> =
-        sqlx::query_as("SELECT id FROM locations WHERE city = ?1 AND state = ?2")
+        sqlx::query_as("SELECT id FROM locations WHERE city = ?1 COLLATE NOCASE AND state = ?2 COLLATE NOCASE")
             .bind(city)
             .bind(state)
             .fetch_optional(pool)
@@ -147,7 +151,7 @@ pub async fn find_or_create_artist(
     name: &str,
 ) -> Result<(i64, bool), sqlx::Error> {
     let row: Option<(i64,)> =
-        sqlx::query_as("SELECT id FROM artists WHERE name = ?1")
+        sqlx::query_as("SELECT id FROM artists WHERE name = ?1 COLLATE NOCASE")
             .bind(name)
             .fetch_optional(pool)
             .await?;
@@ -703,7 +707,20 @@ pub async fn get_event_by_id(
 pub async fn get_artists_with_counts(
     pool: &SqlitePool,
 ) -> Result<Vec<ArtistWithCount>, sqlx::Error> {
-    let rows: Vec<ArtistWithCount> = sqlx::query_as(
+    // Intermediate shape so sqlx can still derive FromRow — the public
+    // `ArtistWithCount` carries `tags: Vec<String>`, which doesn't map cleanly
+    // onto a single SQL column.
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: i64,
+        name: String,
+        event_count: i64,
+        genre: Option<String>,
+        country: Option<String>,
+        artist_type: Option<String>,
+    }
+
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT a.id, a.name, COUNT(ea.event_id) as event_count, a.genre, a.country, a.artist_type
          FROM artists a
          LEFT JOIN event_artists ea ON a.id = ea.artist_id
@@ -713,7 +730,20 @@ pub async fn get_artists_with_counts(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows)
+    let mut tag_map = super::tags::fetch_all_artist_tags(pool).await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| ArtistWithCount {
+            tags: tag_map.remove(&r.id).unwrap_or_default(),
+            id: r.id,
+            name: r.name,
+            event_count: r.event_count,
+            genre: r.genre,
+            country: r.country,
+            artist_type: r.artist_type,
+        })
+        .collect())
 }
 
 pub async fn get_venues_with_counts(
@@ -1003,16 +1033,11 @@ async fn top_genres_from_tags(pool: &SqlitePool) -> Result<Vec<GenreCount>, sqlx
         std::collections::HashMap::new();
 
     for (event_id, tags_csv) in rows {
-        for raw in tags_csv.split(',') {
-            let tag = raw.trim();
-            if tag.is_empty() {
-                continue;
-            }
+        for tag in super::tags::parse_tags_csv(&tags_csv) {
             // Normalize case so "Hip Hop" and "hip hop" collapse into one
             // bucket. Display uses the first-seen spelling below.
-            let key = tag.to_lowercase();
             buckets
-                .entry(key)
+                .entry(tag.to_lowercase())
                 .or_default()
                 .insert(event_id);
         }
@@ -1030,14 +1055,10 @@ async fn top_genres_from_tags(pool: &SqlitePool) -> Result<Vec<GenreCount>, sqlx
     .fetch_all(pool)
     .await?;
     for (tags_csv,) in rescan {
-        for raw in tags_csv.split(',') {
-            let tag = raw.trim();
-            if tag.is_empty() {
-                continue;
-            }
+        for tag in super::tags::parse_tags_csv(&tags_csv) {
             display
                 .entry(tag.to_lowercase())
-                .or_insert_with(|| tag.to_string());
+                .or_insert(tag);
         }
     }
 

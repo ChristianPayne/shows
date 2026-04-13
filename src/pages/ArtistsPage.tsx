@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
 import { EntityMediaSection } from "@/components/EntityMediaSection";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ArrowUpDown, ExternalLink as ExternalLinkIcon } from "lucide-react";
+import { ArrowUpDown, ExternalLink as ExternalLinkIcon, X } from "lucide-react";
 import { SkeletonRow } from "@/components/Skeleton";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { MergeDialog } from "@/components/MergeDialog";
@@ -17,14 +17,76 @@ import type { ArtistWithCount, EventDetail, ArtistStats, ArtistLinks } from "@/t
 
 let lastArtistCount = 0;
 
+// Number of tag chips shown before the "Show all" expand kicks in. Selected
+// tags are pinned and always visible, so this only bounds the unselected tail.
+const TAG_CHIP_PREVIEW_COUNT = 20;
+
 export function ArtistsListPage() {
   const navigate = useNavigate();
   const [artists, setArtists] = useState<ArtistWithCount[] | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "count">("count");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tagsExpanded, setTagsExpanded] = useState(false);
 
   const [artistEvents, setArtistEvents] = useState<Map<number, string[]>>(new Map());
+
+  // Selected tags live in the URL so deep links from detail-page pills work
+  // and state survives back/forward navigation. Stored lowercased — matching
+  // is case-insensitive, mirroring how the Rust side de-dupes tag casings.
+  const selectedTagKeys = useMemo(
+    () => new Set(searchParams.getAll("tag").map((t) => t.toLowerCase())),
+    [searchParams]
+  );
+
+  const toggleTag = (tagKey: string) => {
+    const sp = new URLSearchParams(searchParams);
+    const current = new Set(sp.getAll("tag").map((t) => t.toLowerCase()));
+    if (current.has(tagKey)) current.delete(tagKey);
+    else current.add(tagKey);
+    sp.delete("tag");
+    for (const t of current) sp.append("tag", t);
+    setSearchParams(sp, { replace: true });
+  };
+
+  const clearTags = () => {
+    const sp = new URLSearchParams(searchParams);
+    sp.delete("tag");
+    setSearchParams(sp, { replace: true });
+  };
+
+  // Distinct tags across the current artist list, with frequency counts and
+  // a stable display spelling (first-seen casing wins, same policy as the
+  // Rust top-genres aggregator).
+  const allTags = useMemo(() => {
+    if (!artists) return [];
+    const counts = new Map<string, { display: string; count: number }>();
+    for (const a of artists) {
+      for (const t of a.tags) {
+        const key = t.toLowerCase();
+        const existing = counts.get(key);
+        if (existing) existing.count++;
+        else counts.set(key, { display: t, count: 1 });
+      }
+    }
+    return [...counts.entries()]
+      .map(([key, v]) => ({ key, display: v.display, count: v.count }))
+      .sort((a, b) => b.count - a.count || a.display.localeCompare(b.display));
+  }, [artists]);
+
+  // Pin selected chips to the front so they never get hidden behind the
+  // "Show all" collapse; the unselected tail is what actually gets truncated.
+  const visibleTags = useMemo(() => {
+    const selected = allTags.filter((t) => selectedTagKeys.has(t.key));
+    const unselected = allTags.filter((t) => !selectedTagKeys.has(t.key));
+    if (tagsExpanded) return [...selected, ...unselected];
+    return [...selected, ...unselected.slice(0, TAG_CHIP_PREVIEW_COUNT)];
+  }, [allTags, selectedTagKeys, tagsExpanded]);
+
+  const hiddenTagCount = tagsExpanded
+    ? 0
+    : Math.max(0, allTags.length - visibleTags.length);
 
   useEffect(() => {
     api.getArtists().then((data) => { lastArtistCount = data.length; setArtists(data); });
@@ -57,13 +119,21 @@ export function ArtistsListPage() {
     const q = search.toLowerCase();
     let result = artists;
     if (q) result = result.filter((a) => a.name.toLowerCase().includes(q));
+    // Multiple selected tags compose as OR — click more chips to broaden the
+    // match. AND semantics would be a separate toggle if it turns out to be
+    // what the user actually wants.
+    if (selectedTagKeys.size > 0) {
+      result = result.filter((a) =>
+        a.tags.some((t) => selectedTagKeys.has(t.toLowerCase()))
+      );
+    }
     return [...result].sort((a, b) => {
       let cmp = sortBy === "count"
         ? a.event_count - b.event_count
         : a.name.replace(/^The\s+/i, "").localeCompare(b.name.replace(/^The\s+/i, ""));
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [artists, search, sortBy, sortDir]);
+  }, [artists, search, sortBy, sortDir, selectedTagKeys]);
 
   return (
     <div className="space-y-4">
@@ -76,6 +146,55 @@ export function ArtistsListPage() {
           className="w-1/2 mx-auto"
         />
       </div>
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 px-2">
+          {visibleTags.map((t) => {
+            const selected = selectedTagKeys.has(t.key);
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => toggleTag(t.key)}
+                className={
+                  selected
+                    ? "rounded-full border border-primary bg-primary/10 px-2 py-0.5 text-xs text-foreground"
+                    : "rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+                }
+              >
+                {t.display}
+                <span className="ml-1 text-muted-foreground/70">{t.count}</span>
+              </button>
+            );
+          })}
+          {hiddenTagCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setTagsExpanded(true)}
+              className="rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              +{hiddenTagCount} more
+            </button>
+          )}
+          {tagsExpanded && allTags.length > TAG_CHIP_PREVIEW_COUNT && (
+            <button
+              type="button"
+              onClick={() => setTagsExpanded(false)}
+              className="rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              show less
+            </button>
+          )}
+          {selectedTagKeys.size > 0 && (
+            <button
+              type="button"
+              onClick={clearTags}
+              className="ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3 w-3" /> clear
+            </button>
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
         <span className="w-6 shrink-0">#</span>
         <button className="w-48 shrink-0 flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("name")}>
@@ -226,7 +345,12 @@ export function ArtistDetailPage() {
         options={artists.map((a) => ({ id: a.id, label: a.name }))}
         onMerge={async (keepId, mergeId) => {
           await api.mergeArtists(keepId, mergeId);
-          navigate("/artists");
+          const [refreshedArtists, refreshedEvents] = await Promise.all([
+            api.getArtists(),
+            api.getEventsForArtist(keepId),
+          ]);
+          setArtists(refreshedArtists);
+          setEvents(refreshedEvents);
         }}
       />
 
@@ -255,12 +379,14 @@ export function ArtistDetailPage() {
           {stats.tags && (
             <div className="flex flex-wrap gap-1.5">
               {stats.tags.split(", ").map((tag) => (
-                <span
+                <button
                   key={tag}
-                  className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
+                  type="button"
+                  onClick={() => navigate(`/artists?tag=${encodeURIComponent(tag.toLowerCase())}`)}
+                  className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
                 >
                   {tag}
-                </span>
+                </button>
               ))}
             </div>
           )}

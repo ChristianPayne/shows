@@ -41,7 +41,8 @@ export function MergeDialog({
 
   const handleSelect = (value: string) => {
     setSearch(value);
-    const match = options.find((o) => o.label === value);
+    const lowered = value.toLowerCase();
+    const match = options.find((o) => o.label.toLowerCase() === lowered);
     setSelectedId(match?.id ?? null);
   };
 

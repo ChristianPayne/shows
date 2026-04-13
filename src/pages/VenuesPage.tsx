@@ -200,7 +200,12 @@ export function VenueDetailPage() {
         options={venues.map((v) => ({ id: v.id, label: v.name }))}
         onMerge={async (keepId, mergeId) => {
           await api.mergeVenues(keepId, mergeId);
-          navigate("/venues");
+          const [refreshedVenues, refreshedEvents] = await Promise.all([
+            api.getVenues(),
+            api.getEventsForVenue(keepId),
+          ]);
+          setVenues(refreshedVenues);
+          setEvents(refreshedEvents);
         }}
       />
       <EventsTable events={events} />

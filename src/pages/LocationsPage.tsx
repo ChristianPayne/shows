@@ -194,7 +194,12 @@ export function LocationDetailPage() {
         options={locations.map((l) => ({ id: l.id, label: `${l.city}, ${l.state}` }))}
         onMerge={async (keepId, mergeId) => {
           await api.mergeLocations(keepId, mergeId);
-          navigate("/locations");
+          const [refreshedLocations, refreshedEvents] = await Promise.all([
+            api.getLocations(),
+            api.getEventsForLocation(keepId),
+          ]);
+          setLocations(refreshedLocations);
+          setEvents(refreshedEvents);
         }}
       />
       <EventsTable events={events} />

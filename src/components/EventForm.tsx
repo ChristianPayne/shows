@@ -67,11 +67,14 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
     api.getVenues().then((venues) => {
       // Distinct venue names for the autocomplete dropdown
       setVenueNames([...new Set(venues.map((v) => v.name))]);
+      // Keyed by lowercased name so lookups match regardless of how the user
+      // typed the venue — mirrors the case-insensitive dedupe Rust does on save.
       const map = new Map<string, { city: string; state: string }[]>();
       for (const v of venues) {
-        const list = map.get(v.name) ?? [];
+        const key = v.name.toLowerCase();
+        const list = map.get(key) ?? [];
         list.push({ city: v.city, state: v.state });
-        map.set(v.name, list);
+        map.set(key, list);
       }
       setVenueLocationMap(map);
     });
@@ -82,17 +85,25 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
     api.getArtists().then((a) => setArtistNames(a.map((x) => x.name)));
   }, []);
 
-  const availableArtists = useMemo(
-    () => artistNames.filter((a) => !artists.some((fa) => fa.name === a)),
-    [artistNames, artists]
-  );
+  const availableArtists = useMemo(() => {
+    const taken = new Set(artists.map((fa) => fa.name.toLowerCase()));
+    return artistNames.filter((a) => !taken.has(a.toLowerCase()));
+  }, [artistNames, artists]);
 
   const addArtist = () => {
     const trimmed = artistInput.trim();
-    if (trimmed && !artists.some((a) => a.name === trimmed)) {
-      setArtists([...artists, { name: trimmed, setGroup: null }]);
+    if (!trimmed) return;
+    const lowered = trimmed.toLowerCase();
+    if (artists.some((a) => a.name.toLowerCase() === lowered)) {
       setArtistInput("");
+      return;
     }
+    // Snap to the canonical casing if this artist already exists in the DB —
+    // prevents visual drift between what the user typed and what Rust will
+    // dedupe to on save.
+    const canonical = artistNames.find((a) => a.toLowerCase() === lowered) ?? trimmed;
+    setArtists([...artists, { name: canonical, setGroup: null }]);
+    setArtistInput("");
   };
 
   const removeArtist = (index: number) => {
@@ -220,7 +231,7 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
               // Auto-fill location only when there's no ambiguity. If the same
               // venue name lives in multiple cities, the user has to specify
               // which one — that fills in the disambiguator.
-              const locations = venueLocationMap.get(v);
+              const locations = venueLocationMap.get(v.toLowerCase());
               if (locations && locations.length === 1) {
                 setCity(locations[0].city);
                 setState(locations[0].state);
@@ -230,7 +241,7 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
             placeholder="e.g., Pier 80"
           />
           {(() => {
-            const locations = venueLocationMap.get(venue);
+            const locations = venueLocationMap.get(venue.toLowerCase());
             if (locations && locations.length > 1) {
               return (
                 <p className="text-xs text-muted-foreground">

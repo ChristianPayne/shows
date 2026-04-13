@@ -9,6 +9,7 @@ import { ArtistsListPage, ArtistDetailPage } from "@/pages/ArtistsPage";
 import { VenuesListPage, VenueDetailPage } from "@/pages/VenuesPage";
 import { LocationsListPage, LocationDetailPage } from "@/pages/LocationsPage";
 import { StatsPage } from "@/pages/StatsPage";
+import { MediaPage } from "@/pages/MediaPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { cn } from "@/lib/utils";
 import { applyAccent } from "@/lib/accent";
@@ -21,6 +22,7 @@ import {
   MapPin,
   Settings,
   LayoutDashboard,
+  Image as ImageIcon,
   Plus,
 } from "lucide-react";
 
@@ -30,6 +32,7 @@ const NAV_ITEMS = [
   { to: "/artists", label: "Artists", icon: <Mic2 className="h-4 w-4" /> },
   { to: "/venues", label: "Venues", icon: <Building2 className="h-4 w-4" /> },
   { to: "/locations", label: "Locations", icon: <MapPin className="h-4 w-4" /> },
+  { to: "/media", label: "Media", icon: <ImageIcon className="h-4 w-4" /> },
 ];
 
 const SETTINGS_NAV = { to: "/settings", label: "Settings", icon: <Settings className="h-4 w-4" /> };
@@ -151,6 +154,7 @@ function AppLayout() {
           <Route path="/venues/:id" element={<VenueDetailPage />} />
           <Route path="/locations" element={<LocationsListPage />} />
           <Route path="/locations/:id" element={<LocationDetailPage />} />
+          <Route path="/media" element={<MediaPage />} />
           <Route path="/settings" element={
             <SettingsPage
               accentId={accentId}
