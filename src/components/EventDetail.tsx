@@ -19,7 +19,7 @@ import {
 import { MediaGallery } from "@/components/MediaGallery";
 import { MediaUploadButton } from "@/components/MediaUploadButton";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, ChevronDown, ChevronUp, CheckSquare, Trash2, X } from "lucide-react";
+import { ExternalLink, ChevronDown, ChevronUp, CheckSquare, Trash2, X, ListMusic } from "lucide-react";
 import * as api from "@/api";
 import type {
   EventDetail as EventDetailType,
@@ -197,59 +197,65 @@ function ArtistCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
-  const hasSetlist = setlist && setlist.songs.length > 0;
-  const checkedNoSetlist = setlist !== undefined && !hasSetlist;
-  const canExpand = hasSetlist || (showSetlistButton && setlist === undefined);
+  const hasSetlist = !!setlist && setlist.songs.length > 0;
+  const showFetchButton = showSetlistButton && setlist === undefined;
 
-  const handleRowClick = async () => {
-    if (hasSetlist) {
-      setExpanded(!expanded);
-    } else if (showSetlistButton && setlist === undefined) {
-      setLoading(true);
+  const handleFetch = async () => {
+    setLoading(true);
+    try {
       await onFetchSetlist();
-      setLoading(false);
+      // Auto-expand when the fetch succeeds so the user lands on the songs
+      // they just asked for. If the result is empty the strip never appears
+      // and this flag is harmless.
       setExpanded(true);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="rounded-lg border hover:border-primary/30 transition-colors">
-      <div
-        className={`flex items-center gap-3 px-4 py-3 ${canExpand ? "cursor-pointer" : ""}`}
-        onClick={canExpand ? handleRowClick : undefined}
-      >
-        <div className="flex-1 min-w-0">
-          <Link
-            to={`/artists/${artist.id}`}
-            className="font-medium text-sm hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {artist.name}
-          </Link>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-muted-foreground">
-              Seen {artist.total_events} {artist.total_events === 1 ? "time" : "times"}
-            </span>
-            {artist.first_event && (
-              <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-primary/20">First time</Badge>
-            )}
+    <div className="rounded-lg border hover:border-primary/30 transition-colors overflow-hidden">
+      <div className="flex items-stretch">
+        <Link
+          to={`/artists/${artist.id}`}
+          className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors"
+        >
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm truncate">{artist.name}</div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-muted-foreground">
+                Seen {artist.total_events} {artist.total_events === 1 ? "time" : "times"}
+              </span>
+              {artist.first_event && (
+                <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-primary/20">First time</Badge>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {loading && (
-            <span className="text-xs text-muted-foreground">loading...</span>
-          )}
-          {hasSetlist && (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              {setlist!.songs.length} songs
-              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </span>
-          )}
-          {!hasSetlist && !loading && !checkedNoSetlist && showSetlistButton && (
-            <span className="text-xs text-muted-foreground">Setlist</span>
-          )}
-        </div>
+        </Link>
+        {showFetchButton && (
+          <button
+            type="button"
+            onClick={handleFetch}
+            disabled={loading}
+            className="shrink-0 flex items-center gap-1.5 border-l px-3 text-xs text-muted-foreground hover:bg-accent/30 hover:text-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            aria-label="Fetch setlist"
+          >
+            <ListMusic className="h-4 w-4" />
+            {loading ? "Loading…" : "Setlist"}
+          </button>
+        )}
       </div>
+      {hasSetlist && (
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="w-full flex items-center justify-between border-t px-4 py-1.5 text-xs text-muted-foreground hover:bg-accent/30 hover:text-foreground transition-colors"
+          aria-expanded={expanded}
+        >
+          <span>Setlist · {setlist!.songs.length} songs</span>
+          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
+      )}
       {hasSetlist && expanded && (
         <div className="border-t px-3 py-2 space-y-0.5">
           {setlist!.songs.map((song, i) => (
@@ -261,8 +267,9 @@ function ArtistCard({
           ))}
           {setlist!.url && (
             <button
-              onClick={(e) => { e.stopPropagation(); openUrl(setlist!.url); }}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-1 pt-1 border-t"
+              type="button"
+              onClick={() => openUrl(setlist!.url!)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-1 pt-1 border-t w-full"
             >
               <ExternalLink className="h-3 w-3" /> View on setlist.fm
             </button>

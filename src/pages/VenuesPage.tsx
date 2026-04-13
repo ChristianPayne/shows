@@ -4,9 +4,17 @@ import { BackButton } from "@/components/BackButton";
 import { EntityMediaSection } from "@/components/EntityMediaSection";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUpDown } from "lucide-react";
-import { SkeletonRow } from "@/components/Skeleton";
+import { SkeletonTableRow } from "@/components/Skeleton";
 import { MergeDialog } from "@/components/MergeDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
@@ -74,61 +82,83 @@ export function VenuesListPage() {
           className="w-1/2 mx-auto"
         />
       </div>
-      <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
-        <span className="w-6 shrink-0">#</span>
-        <button className="w-48 shrink-0 flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("name")}>
-          Name <ArrowUpDown className="h-3 w-3" />
-        </button>
-        <button className="flex-1 flex items-center justify-end gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("count")}>
-          Events <ArrowUpDown className="h-3 w-3" />
-        </button>
-        <span className="w-6 shrink-0" />
-      </div>
-      <div className="space-y-1">
-        {!venues ? (
-          Array.from({ length: lastVenueCount || 10 }, (_, i) => (
-            <SkeletonRow key={i} />
-          ))
-        ) : filtered.map((venue, index) => {
-          const maxCount = Math.max(1, ...filtered.map((v) => v.event_count));
-          const pct = (venue.event_count / maxCount) * 100;
-          return (
-              <button
-                key={venue.id}
-                className="group flex items-center gap-3 w-full rounded-md px-2 py-1.5 hover:bg-accent/30 transition-colors text-left"
-                onClick={() => navigate(`/venues/${venue.id}`)}
-              >
-                <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
-                <span className="flex-1 min-w-0 text-sm font-medium truncate">
-                  {venue.name}
-                  <span className="ml-2 text-xs text-muted-foreground font-normal">
-                    {venue.city}, {venue.state}
-                  </span>
-                </span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="w-1/4 shrink-0 h-5 bg-muted rounded overflow-hidden relative">
-                      <div
-                        className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  {venueEvents.has(venue.id) && (
-                    <TooltipContent side="bottom" className="max-w-xs">
-                      <div className="flex flex-col gap-0.5">
-                        {venueEvents.get(venue.id)!.map((name, j) => (
-                          <span key={j}>{name}</span>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-                <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{venue.event_count}</span>
-              </button>
-            );
-        })}
-      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-10 text-muted-foreground">#</TableHead>
+            <TableHead
+              className="cursor-pointer select-none hover:text-foreground transition-colors"
+              onClick={() => toggleSort("name")}
+            >
+              <div className="flex items-center gap-1">Name <ArrowUpDown className="h-3 w-3" /></div>
+            </TableHead>
+            <TableHead className="w-1/4" />
+            <TableHead
+              className="w-16 text-right cursor-pointer select-none hover:text-foreground transition-colors"
+              onClick={() => toggleSort("count")}
+            >
+              <div className="flex items-center justify-end gap-1">Events <ArrowUpDown className="h-3 w-3" /></div>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {!venues ? (
+            Array.from({ length: lastVenueCount || 10 }, (_, i) => (
+              <SkeletonTableRow key={i} colSpan={4} />
+            ))
+          ) : filtered.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-muted-foreground">
+                No venues found
+              </TableCell>
+            </TableRow>
+          ) : (() => {
+            const maxCount = Math.max(1, ...filtered.map((v) => v.event_count));
+            return filtered.map((venue, index) => {
+              const pct = (venue.event_count / maxCount) * 100;
+              return (
+                <TableRow
+                  key={venue.id}
+                  className="group cursor-pointer"
+                  onClick={() => navigate(`/venues/${venue.id}`)}
+                >
+                  <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
+                  <TableCell>
+                    <span className="text-sm font-medium">{venue.name}</span>
+                    <span className="ml-2 text-xs text-muted-foreground font-normal">
+                      {venue.city}, {venue.state}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-5 bg-muted rounded overflow-hidden relative">
+                          <div
+                            className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      {venueEvents.has(venue.id) && (
+                        <TooltipContent side="bottom" className="max-w-xs">
+                          <div className="flex flex-col gap-0.5">
+                            {venueEvents.get(venue.id)!.map((name, j) => (
+                              <span key={j}>{name}</span>
+                            ))}
+                          </div>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell className="text-right text-sm text-muted-foreground">
+                    {venue.event_count}
+                  </TableCell>
+                </TableRow>
+              );
+            });
+          })()}
+        </TableBody>
+      </Table>
     </div>
   );
 }

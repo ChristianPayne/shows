@@ -4,9 +4,17 @@ import { BackButton } from "@/components/BackButton";
 import { EntityMediaSection } from "@/components/EntityMediaSection";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUpDown, ExternalLink as ExternalLinkIcon, X } from "lucide-react";
-import { SkeletonRow } from "@/components/Skeleton";
+import { SkeletonTableRow } from "@/components/Skeleton";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { MergeDialog } from "@/components/MergeDialog";
 import { MatchPickerDialog } from "@/components/MatchPickerDialog";
@@ -195,67 +203,91 @@ export function ArtistsListPage() {
           )}
         </div>
       )}
-      <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
-        <span className="w-6 shrink-0">#</span>
-        <button className="w-48 shrink-0 flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("name")}>
-          Name <ArrowUpDown className="h-3 w-3" />
-        </button>
-        <button className="flex-1 flex items-center justify-end gap-1 hover:text-foreground transition-colors cursor-pointer" onClick={() => toggleSort("count")}>
-          Events <ArrowUpDown className="h-3 w-3" />
-        </button>
-        <span className="w-6 shrink-0" />
-      </div>
-      <div className="space-y-1">
-        {!artists ? (
-          Array.from({ length: lastArtistCount || 10 }, (_, i) => (
-            <SkeletonRow key={i} />
-          ))
-        ) : filtered.map((artist, index) => {
-          const maxCount = Math.max(1, ...filtered.map((a) => a.event_count));
-          const pct = (artist.event_count / maxCount) * 100;
-          return (
-            <button
-              key={artist.id}
-              className="group flex items-center gap-3 w-full rounded-md px-2 py-1.5 hover:bg-accent/30 transition-colors text-left"
-              onClick={() => navigate(`/artists/${artist.id}`)}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-10 text-muted-foreground">#</TableHead>
+            <TableHead
+              className="cursor-pointer select-none hover:text-foreground transition-colors"
+              onClick={() => toggleSort("name")}
             >
-              <span className="w-6 text-xs text-muted-foreground shrink-0">{index + 1}</span>
-              <div className="flex-1 min-w-0 flex items-center gap-2 truncate">
-                <span className="text-sm font-medium">{artist.name}</span>
-                {artist.genre && artist.genre !== "" && (
-                  <span className="text-xs text-muted-foreground">{artist.genre}</span>
-                )}
-                {artist.country && artist.country !== "" && (
-                  <span className="text-xs text-muted-foreground">· {artist.country}</span>
-                )}
-                {artist.artist_type && artist.artist_type !== "" && (
-                  <span className="text-xs text-muted-foreground">· {artist.artist_type}</span>
-                )}
-              </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="w-1/4 shrink-0 h-5 bg-muted rounded overflow-hidden relative">
-                    <div
-                      className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </TooltipTrigger>
-                {artistEvents.has(artist.id) && (
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    <div className="flex flex-col gap-0.5">
-                      {artistEvents.get(artist.id)!.map((name, j) => (
-                        <span key={j}>{name}</span>
-                      ))}
+              <div className="flex items-center gap-1">Name <ArrowUpDown className="h-3 w-3" /></div>
+            </TableHead>
+            <TableHead className="w-1/4" />
+            <TableHead
+              className="w-16 text-right cursor-pointer select-none hover:text-foreground transition-colors"
+              onClick={() => toggleSort("count")}
+            >
+              <div className="flex items-center justify-end gap-1">Events <ArrowUpDown className="h-3 w-3" /></div>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {!artists ? (
+            Array.from({ length: lastArtistCount || 10 }, (_, i) => (
+              <SkeletonTableRow key={i} colSpan={4} />
+            ))
+          ) : filtered.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-muted-foreground">
+                No artists found
+              </TableCell>
+            </TableRow>
+          ) : (() => {
+            const maxCount = Math.max(1, ...filtered.map((a) => a.event_count));
+            return filtered.map((artist, index) => {
+              const pct = (artist.event_count / maxCount) * 100;
+              return (
+                <TableRow
+                  key={artist.id}
+                  className="group cursor-pointer"
+                  onClick={() => navigate(`/artists/${artist.id}`)}
+                >
+                  <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium truncate">{artist.name}</span>
+                      {artist.genre && artist.genre !== "" && (
+                        <span className="text-xs text-muted-foreground">{artist.genre}</span>
+                      )}
+                      {artist.country && artist.country !== "" && (
+                        <span className="text-xs text-muted-foreground">· {artist.country}</span>
+                      )}
+                      {artist.artist_type && artist.artist_type !== "" && (
+                        <span className="text-xs text-muted-foreground">· {artist.artist_type}</span>
+                      )}
                     </div>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-              <span className="text-sm text-muted-foreground w-6 text-right shrink-0">{artist.event_count}</span>
-            </button>
-          );
-        })}
-      </div>
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-5 bg-muted rounded overflow-hidden relative">
+                          <div
+                            className="absolute right-0 top-0 h-full bg-foreground/15 group-hover:bg-primary/70 rounded-l transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      {artistEvents.has(artist.id) && (
+                        <TooltipContent side="bottom" className="max-w-xs">
+                          <div className="flex flex-col gap-0.5">
+                            {artistEvents.get(artist.id)!.map((name, j) => (
+                              <span key={j}>{name}</span>
+                            ))}
+                          </div>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell className="text-right text-sm text-muted-foreground">
+                    {artist.event_count}
+                  </TableCell>
+                </TableRow>
+              );
+            });
+          })()}
+        </TableBody>
+      </Table>
     </div>
   );
 }
