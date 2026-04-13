@@ -25,7 +25,7 @@ Personal desktop app for tracking live music attendance. Import history from CSV
 - **Dark mode** — system default with manual toggle, persisted
 - **Accent colors** — 7 presets, persisted
 - **Autocomplete** — venue, city, state, and artist fields suggest existing entities
-- **Auto-updater** — built-in update checking with one-click install via the in-app banner
+- **Auto-updater** — built-in update checking with one-click install from either the in-app banner or **Settings → Updates**, with inline download progress and error reporting
 
 ## External integrations
 
