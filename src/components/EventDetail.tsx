@@ -179,6 +179,30 @@ export function EventDetailView({
         </div>
       </div>
 
+      {event.friends.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">
+            Friends ({event.friends.length})
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {event.friends.map((friend) => (
+              <Link key={friend.id} to={`/friends/${friend.id}`}>
+                <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/70">
+                  {friend.name}
+                </Badge>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {event.notes && (
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-1">Notes</h3>
+          <p className="text-sm whitespace-pre-wrap">{event.notes}</p>
+        </div>
+      )}
+
       <EventMediaSection eventId={event.id} />
     </div>
   );

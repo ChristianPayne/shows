@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Command } from "cmdk";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Calendar, Mic2, Building2, MapPin } from "lucide-react";
+import { Calendar, Mic2, Building2, MapPin, Users } from "lucide-react";
 import { commands } from "@/lib/commands";
-import type { EventDetail, ArtistWithCount, VenueWithCount, LocationWithCount } from "@/bindings";
+import type { EventDetail, ArtistWithCount, VenueWithCount, LocationWithCount, FriendWithCount } from "@/bindings";
 
 // Rust owns the search + limit pagination for all four entity types. The
 // palette just re-queries on every keystroke — 40 rows max per render, so
@@ -20,6 +20,7 @@ export function CommandPalette() {
   const [events, setEvents] = useState<EventDetail[]>([]);
   const [venues, setVenues] = useState<VenueWithCount[]>([]);
   const [locations, setLocations] = useState<LocationWithCount[]>([]);
+  const [friends, setFriends] = useState<FriendWithCount[]>([]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -45,11 +46,13 @@ export function CommandPalette() {
       commands.queryEvents({ query: search, limit: RESULT_LIMIT }),
       commands.queryVenues({ query: search, limit: RESULT_LIMIT }),
       commands.queryLocations({ query: search, limit: RESULT_LIMIT }),
-    ]).then(([a, e, v, l]) => {
+      commands.queryFriends({ query: search, limit: RESULT_LIMIT }),
+    ]).then(([a, e, v, l, f]) => {
       setArtists(a);
       setEvents(e);
       setVenues(v);
       setLocations(l);
+      setFriends(f);
     });
   }, [open, search]);
 
@@ -57,7 +60,8 @@ export function CommandPalette() {
     artists.length === 0 &&
     events.length === 0 &&
     venues.length === 0 &&
-    locations.length === 0;
+    locations.length === 0 &&
+    friends.length === 0;
 
   const go = (path: string) => {
     navigate(path);
@@ -73,7 +77,7 @@ export function CommandPalette() {
           <Command.Input
             value={search}
             onValueChange={setSearch}
-            placeholder="Search events, artists, venues, locations..."
+            placeholder="Search events, artists, friends, venues, locations..."
             className="h-11 w-full px-4 text-sm bg-transparent outline-none border-b placeholder:text-muted-foreground"
           />
           <Command.List className="max-h-80 overflow-y-auto p-2">
@@ -96,6 +100,21 @@ export function CommandPalette() {
                     {artist.genre && artist.genre !== "" && (
                       <span className="ml-auto text-xs text-muted-foreground shrink-0">{artist.genre}</span>
                     )}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
+
+            {friends.length > 0 && (
+              <Command.Group heading="Friends">
+                {friends.map((friend) => (
+                  <Command.Item
+                    key={`friend-${friend.id}`}
+                    onSelect={() => go(`/friends/${friend.id}`)}
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer aria-selected:bg-accent"
+                  >
+                    <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{friend.name}</span>
                   </Command.Item>
                 ))}
               </Command.Group>

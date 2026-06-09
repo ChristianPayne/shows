@@ -427,11 +427,15 @@ async fn run_import(
 
         queries::create_event(
             pool,
-            &row.event_name,
-            &date,
-            row.end_date.as_deref(),
-            venue_id,
-            &artists,
+            queries::EventWrite {
+                name: &row.event_name,
+                date: &date,
+                end_date: row.end_date.as_deref(),
+                notes: None,
+                venue_id,
+                artists: &artists,
+                friends: &[],
+            },
         )
         .await
         .map_err(|e| format!("Row {}: Failed to create event — {}", row.row_index + 2, e))?;

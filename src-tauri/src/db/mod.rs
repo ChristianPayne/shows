@@ -43,6 +43,10 @@ const MIGRATIONS: &[&str] = &[
     // timestamp (EXIF DateTimeOriginal on images, mvhd creation_time on
     // MP4/MOV) so galleries sort chronologically instead of by upload order.
     include_str!("../../migrations/015_media_captured_at.sql"),
+    // v16: add free-form notes column to events
+    include_str!("../../migrations/016_add_notes.sql"),
+    // v17: friends + event_friends tables for tagging who you went with
+    include_str!("../../migrations/017_add_friends.sql"),
 ];
 
 /// Initialize the SQLite database, run pending migrations, and return the connection pool.

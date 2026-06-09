@@ -168,31 +168,74 @@ pub async fn find_or_create_artist(
     Ok((result.last_insert_rowid(), true))
 }
 
+/// Friend counterpart to `find_or_create_artist`. Returns just the id — unlike
+/// artists, friends have no metadata to fetch, so there's no "was inserted"
+/// flag to act on. Case-insensitive match keeps "Mike" and "mike" the same row.
+pub async fn find_or_create_friend(pool: &SqlitePool, name: &str) -> Result<i64, sqlx::Error> {
+    let row: Option<(i64,)> =
+        sqlx::query_as("SELECT id FROM friends WHERE name = ?1 COLLATE NOCASE")
+            .bind(name)
+            .fetch_optional(pool)
+            .await?;
+
+    if let Some((id,)) = row {
+        return Ok(id);
+    }
+
+    let result = sqlx::query("INSERT INTO friends (name) VALUES (?1)")
+        .bind(name)
+        .execute(pool)
+        .await?;
+
+    Ok(result.last_insert_rowid())
+}
+
+/// Fetch the friends linked to one event, ordered by name. Used to populate
+/// `EventDetail::friends` at every event-fetch site.
+pub async fn fetch_event_friends(pool: &SqlitePool, event_id: i64) -> Result<Vec<Friend>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT f.id, f.name FROM friends f
+         JOIN event_friends ef ON f.id = ef.friend_id
+         WHERE ef.event_id = ?1
+         ORDER BY f.name COLLATE NOCASE",
+    )
+    .bind(event_id)
+    .fetch_all(pool)
+    .await
+}
+
 // ── Event CRUD ──
 
-/// Each artist entry includes an optional set_group for b2b grouping.
-/// Location is derived from the venue, so it's no longer a parameter.
-pub async fn create_event(
-    pool: &SqlitePool,
-    name: &str,
-    date: &str,
-    end_date: Option<&str>,
-    venue_id: i64,
-    artists: &[(i64, Option<i64>)],
-) -> Result<i64, sqlx::Error> {
+/// Borrowed bundle of the fields written to an event, shared by `create_event`
+/// and `update_event`. Lives here (not in models) because it's purely a
+/// query-layer input shape, never serialized. Each artist entry includes an
+/// optional set_group for b2b grouping; location is derived from the venue, so
+/// it's not a field.
+pub struct EventWrite<'a> {
+    pub name: &'a str,
+    pub date: &'a str,
+    pub end_date: Option<&'a str>,
+    pub notes: Option<&'a str>,
+    pub venue_id: i64,
+    pub artists: &'a [(i64, Option<i64>)],
+    pub friends: &'a [i64],
+}
+
+pub async fn create_event(pool: &SqlitePool, input: EventWrite<'_>) -> Result<i64, sqlx::Error> {
     let result = sqlx::query(
-        "INSERT INTO events (name, date, end_date, venue_id) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO events (name, date, end_date, notes, venue_id) VALUES (?1, ?2, ?3, ?4, ?5)",
     )
-    .bind(name)
-    .bind(date)
-    .bind(end_date)
-    .bind(venue_id)
+    .bind(input.name)
+    .bind(input.date)
+    .bind(input.end_date)
+    .bind(input.notes)
+    .bind(input.venue_id)
     .execute(pool)
     .await?;
 
     let event_id = result.last_insert_rowid();
 
-    for (artist_id, set_group) in artists {
+    for (artist_id, set_group) in input.artists {
         sqlx::query("INSERT INTO event_artists (event_id, artist_id, set_group) VALUES (?1, ?2, ?3)")
             .bind(event_id)
             .bind(artist_id)
@@ -201,30 +244,29 @@ pub async fn create_event(
             .await?;
     }
 
-    Ok(event_id)
-}
+    for friend_id in input.friends {
+        sqlx::query("INSERT INTO event_friends (event_id, friend_id) VALUES (?1, ?2)")
+            .bind(event_id)
+            .bind(friend_id)
+            .execute(pool)
+            .await?;
+    }
 
-/// Borrowed bundle of the fields needed to update an event. Lives here (not in
-/// models) because it's purely a query-layer input shape, never serialized.
-pub struct UpdateEventInput<'a> {
-    pub name: &'a str,
-    pub date: &'a str,
-    pub end_date: Option<&'a str>,
-    pub venue_id: i64,
-    pub artists: &'a [(i64, Option<i64>)],
+    Ok(event_id)
 }
 
 pub async fn update_event(
     pool: &SqlitePool,
     event_id: i64,
-    input: UpdateEventInput<'_>,
+    input: EventWrite<'_>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE events SET name = ?1, date = ?2, end_date = ?3, venue_id = ?4, updated_at = datetime('now') WHERE id = ?5",
+        "UPDATE events SET name = ?1, date = ?2, end_date = ?3, notes = ?4, venue_id = ?5, updated_at = datetime('now') WHERE id = ?6",
     )
     .bind(input.name)
     .bind(input.date)
     .bind(input.end_date)
+    .bind(input.notes)
     .bind(input.venue_id)
     .bind(event_id)
     .execute(pool)
@@ -241,6 +283,20 @@ pub async fn update_event(
             .bind(event_id)
             .bind(artist_id)
             .bind(set_group)
+            .execute(pool)
+            .await?;
+    }
+
+    // Replace friend links the same way: delete existing, insert new.
+    sqlx::query("DELETE FROM event_friends WHERE event_id = ?1")
+        .bind(event_id)
+        .execute(pool)
+        .await?;
+
+    for friend_id in input.friends {
+        sqlx::query("INSERT INTO event_friends (event_id, friend_id) VALUES (?1, ?2)")
+            .bind(event_id)
+            .bind(friend_id)
             .execute(pool)
             .await?;
     }
@@ -317,6 +373,15 @@ pub async fn rename_location(pool: &SqlitePool, location_id: i64, city: &str, st
         .bind(city)
         .bind(state)
         .bind(location_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn rename_friend(pool: &SqlitePool, friend_id: i64, name: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE friends SET name = ?1 WHERE id = ?2")
+        .bind(name)
+        .bind(friend_id)
         .execute(pool)
         .await?;
     Ok(())
@@ -426,6 +491,15 @@ pub async fn delete_venue(pool: &SqlitePool, venue_id: i64) -> Result<(), sqlx::
 pub async fn delete_artist(pool: &SqlitePool, artist_id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM artists WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM event_artists WHERE artist_id = ?1)")
         .bind(artist_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Delete a friend only if they have no linked events.
+pub async fn delete_friend(pool: &SqlitePool, friend_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM friends WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM event_friends WHERE friend_id = ?1)")
+        .bind(friend_id)
         .execute(pool)
         .await?;
     Ok(())
@@ -615,7 +689,7 @@ pub async fn get_artist_context_for_event(
 
 pub async fn get_all_events(pool: &SqlitePool) -> Result<Vec<EventDetail>, sqlx::Error> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.notes, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
@@ -643,11 +717,13 @@ pub async fn get_all_events(pool: &SqlitePool) -> Result<Vec<EventDetail>, sqlx:
             name: row.name,
             date: row.date,
             end_date: row.end_date,
+            notes: row.notes,
             cancelled: row.cancelled,
             venue: row.venue,
             city: row.city,
             state: row.state,
             artist_sets: EventDetail::group_artists(artist_names),
+            friends: fetch_event_friends(pool, row.id).await?,
             venue_id: row.venue_id,
             location_id: row.location_id,
         });
@@ -661,7 +737,7 @@ pub async fn get_event_by_id(
     event_id: i64,
 ) -> Result<Option<EventDetail>, sqlx::Error> {
     let row: Option<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.notes, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
@@ -690,11 +766,13 @@ pub async fn get_event_by_id(
                 name: row.name,
                 date: row.date,
                 end_date: row.end_date,
+                notes: row.notes,
                 cancelled: row.cancelled,
                 venue: row.venue,
                 city: row.city,
                 state: row.state,
                 artist_sets: EventDetail::group_artists(artist_names),
+                friends: fetch_event_friends(pool, row.id).await?,
                 venue_id: row.venue_id,
                 location_id: row.location_id,
             }))
@@ -785,7 +863,7 @@ pub async fn get_events_for_artist(
     artist_id: i64,
 ) -> Result<Vec<EventDetail>, sqlx::Error> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.notes, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
@@ -815,11 +893,13 @@ pub async fn get_events_for_artist(
             name: row.name,
             date: row.date,
             end_date: row.end_date,
+            notes: row.notes,
             cancelled: row.cancelled,
             venue: row.venue,
             city: row.city,
             state: row.state,
             artist_sets: EventDetail::group_artists(artist_names),
+            friends: fetch_event_friends(pool, row.id).await?,
             venue_id: row.venue_id,
             location_id: row.location_id,
         });
@@ -833,7 +913,7 @@ pub async fn get_events_for_venue(
     venue_id: i64,
 ) -> Result<Vec<EventDetail>, sqlx::Error> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.notes, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
@@ -862,11 +942,13 @@ pub async fn get_events_for_venue(
             name: row.name,
             date: row.date,
             end_date: row.end_date,
+            notes: row.notes,
             cancelled: row.cancelled,
             venue: row.venue,
             city: row.city,
             state: row.state,
             artist_sets: EventDetail::group_artists(artist_names),
+            friends: fetch_event_friends(pool, row.id).await?,
             venue_id: row.venue_id,
             location_id: row.location_id,
         });
@@ -880,7 +962,7 @@ pub async fn get_events_for_location(
     location_id: i64,
 ) -> Result<Vec<EventDetail>, sqlx::Error> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.notes, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state
          FROM events e
          JOIN venues v ON e.venue_id = v.id
@@ -909,17 +991,85 @@ pub async fn get_events_for_location(
             name: row.name,
             date: row.date,
             end_date: row.end_date,
+            notes: row.notes,
             cancelled: row.cancelled,
             venue: row.venue,
             city: row.city,
             state: row.state,
             artist_sets: EventDetail::group_artists(artist_names),
+            friends: fetch_event_friends(pool, row.id).await?,
             venue_id: row.venue_id,
             location_id: row.location_id,
         });
     }
 
     Ok(events)
+}
+
+pub async fn get_events_for_friend(
+    pool: &SqlitePool,
+    friend_id: i64,
+) -> Result<Vec<EventDetail>, sqlx::Error> {
+    let rows: Vec<EventRow> = sqlx::query_as(
+        "SELECT e.id, e.name, e.date, e.end_date, e.notes, e.cancelled, e.venue_id, v.location_id,
+                v.name as venue, l.city, l.state
+         FROM events e
+         JOIN venues v ON e.venue_id = v.id
+         JOIN locations l ON v.location_id = l.id
+         JOIN event_friends ef ON e.id = ef.event_id
+         WHERE ef.friend_id = ?1
+         ORDER BY e.date DESC",
+    )
+    .bind(friend_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut events = Vec::new();
+    for row in rows {
+        let artist_names: Vec<ArtistInfo> = sqlx::query_as(
+            "SELECT a.id, a.name, ea.set_group FROM artists a
+             JOIN event_artists ea ON a.id = ea.artist_id
+             WHERE ea.event_id = ?1
+             ORDER BY ea.set_group NULLS LAST, a.name",
+        )
+        .bind(row.id)
+        .fetch_all(pool)
+        .await?;
+
+        events.push(EventDetail {
+            id: row.id,
+            name: row.name,
+            date: row.date,
+            end_date: row.end_date,
+            notes: row.notes,
+            cancelled: row.cancelled,
+            venue: row.venue,
+            city: row.city,
+            state: row.state,
+            artist_sets: EventDetail::group_artists(artist_names),
+            friends: fetch_event_friends(pool, row.id).await?,
+            venue_id: row.venue_id,
+            location_id: row.location_id,
+        });
+    }
+
+    Ok(events)
+}
+
+pub async fn get_friends_with_counts(
+    pool: &SqlitePool,
+) -> Result<Vec<FriendWithCount>, sqlx::Error> {
+    let rows: Vec<FriendWithCount> = sqlx::query_as(
+        "SELECT f.id, f.name, COUNT(ef.event_id) as event_count
+         FROM friends f
+         LEFT JOIN event_friends ef ON f.id = ef.friend_id
+         GROUP BY f.id
+         ORDER BY f.name COLLATE NOCASE",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
 }
 
 // ── Upcoming events (dashboard) ──
@@ -936,6 +1086,7 @@ pub async fn get_upcoming_events(pool: &SqlitePool) -> Result<Vec<UpcomingEvent>
         name: String,
         date: String,
         end_date: Option<String>,
+        notes: Option<String>,
         cancelled: bool,
         venue_id: i64,
         location_id: i64,
@@ -946,7 +1097,7 @@ pub async fn get_upcoming_events(pool: &SqlitePool) -> Result<Vec<UpcomingEvent>
     }
 
     let rows: Vec<UpcomingRow> = sqlx::query_as(
-        "SELECT e.id, e.name, e.date, e.end_date, e.cancelled, e.venue_id, v.location_id,
+        "SELECT e.id, e.name, e.date, e.end_date, e.notes, e.cancelled, e.venue_id, v.location_id,
                 v.name as venue, l.city, l.state,
                 CAST(julianday(e.date) - julianday(date('now', 'localtime')) AS INTEGER) as days_until
          FROM events e
@@ -976,11 +1127,13 @@ pub async fn get_upcoming_events(pool: &SqlitePool) -> Result<Vec<UpcomingEvent>
                 name: row.name,
                 date: row.date,
                 end_date: row.end_date,
+                notes: row.notes,
                 cancelled: row.cancelled,
                 venue: row.venue,
                 city: row.city,
                 state: row.state,
                 artist_sets: EventDetail::group_artists(artist_names),
+                friends: fetch_event_friends(pool, row.id).await?,
                 venue_id: row.venue_id,
                 location_id: row.location_id,
             },
@@ -1156,6 +1309,20 @@ pub async fn get_location_event_names(
     Ok(group_event_names(rows))
 }
 
+pub async fn get_friend_event_names(
+    pool: &SqlitePool,
+) -> Result<Vec<EntityEventNames>, sqlx::Error> {
+    let rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT ef.friend_id, e.name
+         FROM event_friends ef
+         JOIN events e ON e.id = ef.event_id
+         ORDER BY e.date DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(group_event_names(rows))
+}
+
 // ── Stats ──
 
 pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
@@ -1204,6 +1371,19 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
     .fetch_all(pool)
     .await?;
 
+    let top_friends: Vec<EntityCount> = sqlx::query_as(
+        "SELECT f.id, f.name, COUNT(ef.event_id) as count
+         FROM friends f
+         JOIN event_friends ef ON f.id = ef.friend_id
+         JOIN events e ON ef.event_id = e.id
+         WHERE e.cancelled = 0 AND e.date <= date('now')
+         GROUP BY f.id
+         ORDER BY count DESC
+         LIMIT 10",
+    )
+    .fetch_all(pool)
+    .await?;
+
     let events_per_year: Vec<YearCount> = sqlx::query_as(
         "SELECT substr(date, 1, 4) as year, COUNT(*) as count
          FROM events
@@ -1233,6 +1413,7 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
         total_locations,
         top_artists,
         top_venues,
+        top_friends,
         events_per_year,
         events_per_month,
         top_genres,

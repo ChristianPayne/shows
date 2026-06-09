@@ -136,6 +136,32 @@ export function StatsPage() {
         </div>
       </div>
 
+      {stats.top_friends.length > 0 && (
+        <>
+          <Separator />
+          {/* Top friends */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold">Most Seen With</h2>
+              <Link to="/friends" className="text-sm text-muted-foreground hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {stats.top_friends.map((friend) => (
+                <BarRow
+                  key={friend.id}
+                  label={friend.name}
+                  count={friend.count}
+                  max={stats.top_friends[0]?.count ?? 1}
+                  to={`/friends/${friend.id}`}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       <Separator />
 
       <div className="grid gap-8 md:grid-cols-2">

@@ -6,6 +6,7 @@ import { UpdateBanner } from "@/components/UpdateBanner";
 import { MemoryRouter, Routes, Route, NavLink, Navigate, useNavigate } from "react-router-dom";
 import { EventsListPage, EventDetailPage, EventEditPage, EventNewPage } from "@/pages/EventsPage";
 import { ArtistsListPage, ArtistDetailPage } from "@/pages/ArtistsPage";
+import { FriendsListPage, FriendDetailPage } from "@/pages/FriendsPage";
 import { VenuesListPage, VenueDetailPage } from "@/pages/VenuesPage";
 import { LocationsListPage, LocationDetailPage } from "@/pages/LocationsPage";
 import { StatsPage } from "@/pages/StatsPage";
@@ -24,12 +25,14 @@ import {
   LayoutDashboard,
   Image as ImageIcon,
   Plus,
+  Users,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
   { to: "/events", label: "Events", icon: <Calendar className="h-4 w-4" /> },
   { to: "/artists", label: "Artists", icon: <Mic2 className="h-4 w-4" /> },
+  { to: "/friends", label: "Friends", icon: <Users className="h-4 w-4" /> },
   { to: "/venues", label: "Venues", icon: <Building2 className="h-4 w-4" /> },
   { to: "/locations", label: "Locations", icon: <MapPin className="h-4 w-4" /> },
   { to: "/media", label: "Media", icon: <ImageIcon className="h-4 w-4" /> },
@@ -49,6 +52,18 @@ function AppLayout() {
     };
     window.addEventListener("mouseup", handler);
     return () => window.removeEventListener("mouseup", handler);
+  }, [navigate]);
+
+  // Cmd/Ctrl+N opens the new event form
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "n" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        navigate("/events/new");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [navigate]);
   const [dark, setDark] = useState(
     document.documentElement.classList.contains("dark")
@@ -150,6 +165,8 @@ function AppLayout() {
           <Route path="/events/:id/edit" element={<EventEditPage />} />
           <Route path="/artists" element={<ArtistsListPage />} />
           <Route path="/artists/:id" element={<ArtistDetailPage />} />
+          <Route path="/friends" element={<FriendsListPage />} />
+          <Route path="/friends/:id" element={<FriendDetailPage />} />
           <Route path="/venues" element={<VenuesListPage />} />
           <Route path="/venues/:id" element={<VenueDetailPage />} />
           <Route path="/locations" element={<LocationsListPage />} />

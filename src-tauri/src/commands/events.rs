@@ -67,10 +67,39 @@ pub struct CreateEventInput {
     pub name: String,
     pub date: String,
     pub end_date: Option<String>,
+    pub notes: Option<String>,
     pub venue: String,
     pub city: String,
     pub state: String,
     pub artists: Vec<ArtistEntry>,
+    /// Names of friends who attended. Resolved to ids (find-or-create) on the
+    /// way in, mirroring how artist names are handled. No set_group — friends
+    /// have no b2b concept.
+    pub friends: Vec<String>,
+}
+
+/// Resolve a list of friend names to deduplicated friend ids, creating any
+/// that don't exist yet. Blank names are skipped; case-insensitive duplicates
+/// collapse to one id so the `event_friends` (event_id, friend_id) primary key
+/// can't be violated by "Mike" + "mike" on the same event.
+async fn resolve_friend_ids(
+    pool: &SqlitePool,
+    names: &[String],
+) -> Result<Vec<i64>, String> {
+    let mut ids = Vec::new();
+    for name in names {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let id = queries::find_or_create_friend(pool, trimmed)
+            .await
+            .map_err(|e| e.to_string())?;
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
 }
 
 #[specta::specta]
@@ -139,9 +168,22 @@ pub async fn create_event(
         }
     }
 
-    let event_id = queries::create_event(&pool, &input.name, &input.date, input.end_date.as_deref(), venue_id, &artists)
-        .await
-        .map_err(|e| e.to_string())?;
+    let friend_ids = resolve_friend_ids(&pool, &input.friends).await?;
+
+    let event_id = queries::create_event(
+        &pool,
+        queries::EventWrite {
+            name: &input.name,
+            date: &input.date,
+            end_date: input.end_date.as_deref(),
+            notes: input.notes.as_deref(),
+            venue_id,
+            artists: &artists,
+            friends: &friend_ids,
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     // Only kick off MusicBrainz lookups when we actually inserted new
     // artists. Unlike the old unconditional spawn — which re-scanned every
@@ -209,15 +251,19 @@ pub async fn update_event(
         }
     }
 
+    let friend_ids = resolve_friend_ids(&pool, &input.friends).await?;
+
     queries::update_event(
         &pool,
         event_id,
-        queries::UpdateEventInput {
+        queries::EventWrite {
             name: &input.name,
             date: &input.date,
             end_date: input.end_date.as_deref(),
+            notes: input.notes.as_deref(),
             venue_id,
             artists: &artists,
+            friends: &friend_ids,
         },
     )
     .await

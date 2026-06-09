@@ -37,6 +37,7 @@ pub struct Event {
     pub name: String,
     pub date: String,
     pub end_date: Option<String>,
+    pub notes: Option<String>,
     pub venue_id: i64,
     pub location_id: i64,
     pub created_at: String,
@@ -54,6 +55,15 @@ pub struct ArtistInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ArtistSet {
     pub artists: Vec<ArtistInfo>,
+}
+
+/// A friend you attended an event with. Deliberately minimal (id + name) —
+/// friends have none of the metadata artists accumulate. Carried inline on
+/// `EventDetail` so the event form can prefill the chips synchronously.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
+pub struct Friend {
+    pub id: i64,
+    pub name: String,
 }
 
 /// Enriched artist info for event detail view — includes attendance context.
@@ -79,11 +89,13 @@ pub struct EventDetail {
     pub name: String,
     pub date: String,
     pub end_date: Option<String>,
+    pub notes: Option<String>,
     pub cancelled: bool,
     pub venue: String,
     pub city: String,
     pub state: String,
     pub artist_sets: Vec<ArtistSet>,
+    pub friends: Vec<Friend>,
     pub venue_id: i64,
     pub location_id: i64,
 }
@@ -119,6 +131,7 @@ pub struct EventRow {
     pub name: String,
     pub date: String,
     pub end_date: Option<String>,
+    pub notes: Option<String>,
     pub cancelled: bool,
     pub venue_id: i64,
     pub location_id: i64,
@@ -161,6 +174,9 @@ pub struct Stats {
     pub total_locations: i64,
     pub top_artists: Vec<EntityCount>,
     pub top_venues: Vec<EntityCount>,
+    /// Friends you've attended the most events with. Standalone friends (zero
+    /// events) are excluded — the inner join drops them.
+    pub top_friends: Vec<EntityCount>,
     pub events_per_year: Vec<YearCount>,
     pub events_per_month: Vec<MonthCount>,
     /// Aggregated from `artists.tags` (MusicBrainz tag lists), counted by
@@ -229,6 +245,13 @@ pub struct LocationWithCount {
     pub id: i64,
     pub city: String,
     pub state: String,
+    pub event_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
+pub struct FriendWithCount {
+    pub id: i64,
+    pub name: String,
     pub event_count: i64,
 }
 

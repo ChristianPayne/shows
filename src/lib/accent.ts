@@ -57,6 +57,13 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     light: { primary: "oklch(0.555 0.115 174.402)", primaryForeground: "oklch(0.985 0 0)" },
     dark: { primary: "oklch(0.64 0.112 178.042)", primaryForeground: "oklch(0.985 0 0)" },
   },
+  {
+    id: "neon-pink",
+    label: "Neon Pink",
+    swatch: "#ff10f0",
+    light: { primary: "oklch(0.62 0.27 350)", primaryForeground: "oklch(0.985 0 0)" },
+    dark: { primary: "oklch(0.7 0.25 350)", primaryForeground: "oklch(0.985 0 0)" },
+  },
 ];
 
 export function applyAccent(presetId: string, isDark: boolean) {

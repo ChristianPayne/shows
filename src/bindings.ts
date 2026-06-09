@@ -125,6 +125,27 @@ async getLocations() : Promise<Result<LocationWithCount[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getFriends() : Promise<Result<FriendWithCount[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_friends") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Create a standalone friend not tied to any event. Find-or-create semantics:
+ * re-adding an existing name (case-insensitively) is a no-op that returns the
+ * existing id rather than erroring on the UNIQUE constraint. Returns the id.
+ */
+async createFriend(name: string) : Promise<Result<number, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_friend", { name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getEventsForArtist(artistId: number, sortKey: EventSortKey | null, sortDir: SortDir | null) : Promise<Result<EventDetail[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_events_for_artist", { artistId, sortKey, sortDir }) };
@@ -149,6 +170,14 @@ async getEventsForLocation(locationId: number, sortKey: EventSortKey | null, sor
     else return { status: "error", error: e  as any };
 }
 },
+async getEventsForFriend(friendId: number, sortKey: EventSortKey | null, sortDir: SortDir | null) : Promise<Result<EventDetail[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_events_for_friend", { friendId, sortKey, sortDir }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getArtistEventNames() : Promise<Result<EntityEventNames[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_artist_event_names") };
@@ -168,6 +197,14 @@ async getVenueEventNames() : Promise<Result<EntityEventNames[], string>> {
 async getLocationEventNames() : Promise<Result<EntityEventNames[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_location_event_names") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getFriendEventNames() : Promise<Result<EntityEventNames[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_friend_event_names") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -205,6 +242,14 @@ async queryLocations(input: LocationsQueryInput) : Promise<Result<LocationWithCo
     else return { status: "error", error: e  as any };
 }
 },
+async queryFriends(input: FriendsQueryInput) : Promise<Result<FriendWithCount[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("query_friends", { input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async renameArtist(artistId: number, name: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("rename_artist", { artistId, name }) };
@@ -224,6 +269,14 @@ async renameVenue(venueId: number, name: string) : Promise<Result<null, string>>
 async renameLocation(locationId: number, city: string, state: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("rename_location", { locationId, city, state }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async renameFriend(friendId: number, name: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("rename_friend", { friendId, name }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -272,6 +325,14 @@ async deleteArtist(artistId: number) : Promise<Result<null, string>> {
 async deleteLocation(locationId: number) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("delete_location", { locationId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteFriend(friendId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_friend", { friendId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -604,7 +665,13 @@ export type ArtistsQueryInput = { query?: string | null;
  * we lowercase them here for the comparison.
  */
 tags?: string[] | null; sortKey?: EntitySortKey | null; sortDir?: SortDir | null; limit?: number | null }
-export type CreateEventInput = { name: string; date: string; end_date: string | null; venue: string; city: string; state: string; artists: ArtistEntry[] }
+export type CreateEventInput = { name: string; date: string; end_date: string | null; notes: string | null; venue: string; city: string; state: string; artists: ArtistEntry[]; 
+/**
+ * Names of friends who attended. Resolved to ids (find-or-create) on the
+ * way in, mirroring how artist names are handled. No set_group — friends
+ * have no b2b concept.
+ */
+friends: string[] }
 /**
  * Adjacently-tagged so the frontend can discriminate on `event` and get a
  * typed `data` payload. Kept in sync with the `useUpdater` hook's switch on
@@ -628,7 +695,7 @@ export type EntitySortKey = "name" | "count"
 /**
  * Event with all related data joined — used for list and detail views.
  */
-export type EventDetail = { id: number; name: string; date: string; end_date: string | null; cancelled: boolean; venue: string; city: string; state: string; artist_sets: ArtistSet[]; venue_id: number; location_id: number }
+export type EventDetail = { id: number; name: string; date: string; end_date: string | null; notes: string | null; cancelled: boolean; venue: string; city: string; state: string; artist_sets: ArtistSet[]; friends: Friend[]; venue_id: number; location_id: number }
 /**
  * Media row with its computed absolute filesystem path, ready to be wrapped
  * by the frontend's `convertFileSrc`. `event_name` / `event_date` are
@@ -638,6 +705,14 @@ export type EventDetail = { id: number; name: string; date: string; end_date: st
 export type EventMedia = { id: number; event_id: number; filename: string; mime_type: string; file_size: number; caption: string | null; created_at: string; captured_at: string | null; absolute_path: string; event_name: string | null; event_date: string | null }
 export type EventSortKey = "date" | "name" | "venue" | "location"
 export type EventsQueryInput = { query?: string | null; sortKey?: EventSortKey | null; sortDir?: SortDir | null; limit?: number | null }
+/**
+ * A friend you attended an event with. Deliberately minimal (id + name) —
+ * friends have none of the metadata artists accumulate. Carried inline on
+ * `EventDetail` so the event form can prefill the chips synchronously.
+ */
+export type Friend = { id: number; name: string }
+export type FriendWithCount = { id: number; name: string; event_count: number }
+export type FriendsQueryInput = { query?: string | null; sortKey?: EntitySortKey | null; sortDir?: SortDir | null; limit?: number | null }
 /**
  * A single row for the Top Genres radar chart. Genres don't have DB ids
  * — they're derived from comma-split `artists.tags` values — so this uses
@@ -688,7 +763,12 @@ export type SortDir = "asc" | "desc"
 /**
  * Stats summary for the dashboard.
  */
-export type Stats = { total_events: number; total_artists: number; total_venues: number; total_locations: number; top_artists: EntityCount[]; top_venues: EntityCount[]; events_per_year: YearCount[]; events_per_month: MonthCount[]; 
+export type Stats = { total_events: number; total_artists: number; total_venues: number; total_locations: number; top_artists: EntityCount[]; top_venues: EntityCount[]; 
+/**
+ * Friends you've attended the most events with. Standalone friends (zero
+ * events) are excluded — the inner join drops them.
+ */
+top_friends: EntityCount[]; events_per_year: YearCount[]; events_per_month: MonthCount[]; 
 /**
  * Aggregated from `artists.tags` (MusicBrainz tag lists), counted by
  * distinct attended events per tag. Can be empty when no artists have

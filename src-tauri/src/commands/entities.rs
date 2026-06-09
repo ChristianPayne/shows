@@ -4,8 +4,8 @@ use tauri::State;
 use crate::commands::genres;
 use crate::commands::query::{self, EventSortKey, SortDir};
 use crate::db::models::{
-    ArtistStats, ArtistWithCount, EntityEventNames, EventDetail, LocationWithCount, TagCount,
-    VenueAutocompleteEntry, VenueWithCount,
+    ArtistStats, ArtistWithCount, EntityEventNames, EventDetail, FriendWithCount, LocationWithCount,
+    TagCount, VenueAutocompleteEntry, VenueWithCount,
 };
 use crate::db::queries;
 
@@ -49,6 +49,29 @@ pub async fn get_venue_autocomplete(
 #[tauri::command]
 pub async fn get_locations(pool: State<'_, SqlitePool>) -> Result<Vec<LocationWithCount>, String> {
     queries::get_locations_with_counts(&pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub async fn get_friends(pool: State<'_, SqlitePool>) -> Result<Vec<FriendWithCount>, String> {
+    queries::get_friends_with_counts(&pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Create a standalone friend not tied to any event. Find-or-create semantics:
+/// re-adding an existing name (case-insensitively) is a no-op that returns the
+/// existing id rather than erroring on the UNIQUE constraint. Returns the id.
+#[specta::specta]
+#[tauri::command]
+pub async fn create_friend(pool: State<'_, SqlitePool>, name: String) -> Result<i64, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Friend name cannot be empty".to_string());
+    }
+    queries::find_or_create_friend(&pool, trimmed)
         .await
         .map_err(|e| e.to_string())
 }
@@ -115,6 +138,25 @@ pub async fn get_events_for_location(
     Ok(events)
 }
 
+#[specta::specta]
+#[tauri::command]
+pub async fn get_events_for_friend(
+    pool: State<'_, SqlitePool>,
+    friend_id: i64,
+    sort_key: Option<EventSortKey>,
+    sort_dir: Option<SortDir>,
+) -> Result<Vec<EventDetail>, String> {
+    let mut events = queries::get_events_for_friend(&pool, friend_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    query::sort_events(
+        &mut events,
+        sort_key.unwrap_or(EventSortKey::Date),
+        sort_dir.unwrap_or(SortDir::Desc),
+    );
+    Ok(events)
+}
+
 // Aggregated event-name lists for the Artists/Venues/Locations list-page
 // tooltips. Each returns one row per entity that has at least one event;
 // entities with zero events are omitted (the tooltip is only useful when
@@ -146,6 +188,16 @@ pub async fn get_location_event_names(
     pool: State<'_, SqlitePool>,
 ) -> Result<Vec<EntityEventNames>, String> {
     queries::get_location_event_names(&pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub async fn get_friend_event_names(
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<EntityEventNames>, String> {
+    queries::get_friend_event_names(&pool)
         .await
         .map_err(|e| e.to_string())
 }
@@ -199,6 +251,12 @@ pub async fn rename_venue(pool: State<'_, SqlitePool>, venue_id: i64, name: Stri
 #[tauri::command]
 pub async fn rename_location(pool: State<'_, SqlitePool>, location_id: i64, city: String, state: String) -> Result<(), String> {
     queries::rename_location(&pool, location_id, &city, &state).await.map_err(|e| e.to_string())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub async fn rename_friend(pool: State<'_, SqlitePool>, friend_id: i64, name: String) -> Result<(), String> {
+    queries::rename_friend(&pool, friend_id, &name).await.map_err(|e| e.to_string())
 }
 
 #[specta::specta]
@@ -257,6 +315,14 @@ pub async fn delete_artist(pool: State<'_, SqlitePool>, artist_id: i64) -> Resul
 #[tauri::command]
 pub async fn delete_location(pool: State<'_, SqlitePool>, location_id: i64) -> Result<(), String> {
     queries::delete_location(&pool, location_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub async fn delete_friend(pool: State<'_, SqlitePool>, friend_id: i64) -> Result<(), String> {
+    queries::delete_friend(&pool, friend_id)
         .await
         .map_err(|e| e.to_string())
 }

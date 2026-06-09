@@ -14,7 +14,9 @@ use sqlx::SqlitePool;
 use std::collections::HashSet;
 use tauri::State;
 
-use crate::db::models::{ArtistWithCount, EventDetail, LocationWithCount, VenueWithCount};
+use crate::db::models::{
+    ArtistWithCount, EventDetail, FriendWithCount, LocationWithCount, VenueWithCount,
+};
 use crate::db::queries;
 
 // ── Shared shapes ─────────────────────────────────────────────────────────
@@ -100,6 +102,7 @@ fn filter_events(events: &mut Vec<EventDetail>, query_lower: &str) {
             || e.artist_sets
                 .iter()
                 .any(|set| set.artists.iter().any(|a| contains_ci(&a.name, query_lower)))
+            || e.friends.iter().any(|f| contains_ci(&f.name, query_lower))
     });
 }
 
@@ -336,6 +339,59 @@ pub async fn query_locations(
         locations.truncate(limit);
     }
     Ok(locations)
+}
+
+// ── Friends ───────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendsQueryInput {
+    #[specta(optional)]
+    pub query: Option<String>,
+    #[specta(optional)]
+    pub sort_key: Option<EntitySortKey>,
+    #[specta(optional)]
+    pub sort_dir: Option<SortDir>,
+    #[specta(optional)]
+    pub limit: Option<usize>,
+}
+
+fn filter_friends(friends: &mut Vec<FriendWithCount>, query_lower: &str) {
+    friends.retain(|f| contains_ci(&f.name, query_lower));
+}
+
+fn sort_friends(friends: &mut [FriendWithCount], key: EntitySortKey, dir: SortDir) {
+    friends.sort_by(|a, b| {
+        let cmp = match key {
+            EntitySortKey::Name => sort_key_name(&a.name).cmp(&sort_key_name(&b.name)),
+            EntitySortKey::Count => a.event_count.cmp(&b.event_count),
+        };
+        apply_dir(cmp, dir)
+    });
+}
+
+#[specta::specta]
+#[tauri::command]
+pub async fn query_friends(
+    pool: State<'_, SqlitePool>,
+    input: FriendsQueryInput,
+) -> Result<Vec<FriendWithCount>, String> {
+    let mut friends = queries::get_friends_with_counts(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if let Some(q) = normalize_query(input.query.as_deref()) {
+        filter_friends(&mut friends, &q);
+    }
+
+    let key = input.sort_key.unwrap_or(EntitySortKey::Count);
+    let dir = input.sort_dir.unwrap_or(SortDir::Desc);
+    sort_friends(&mut friends, key, dir);
+
+    if let Some(limit) = input.limit {
+        friends.truncate(limit);
+    }
+    Ok(friends)
 }
 
 #[cfg(test)]

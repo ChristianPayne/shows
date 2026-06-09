@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -44,12 +45,19 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
   const [venue, setVenue] = useState(initialData?.venue ?? "");
   const [city, setCity] = useState(initialData?.city ?? "");
   const [state, setState] = useState(initialData?.state ?? "");
+  const [notes, setNotes] = useState(initialData?.notes ?? "");
   const [artists, setArtists] = useState<FormArtist[]>(
     initialData?.artist_sets.flatMap((s) =>
       s.artists.map((a) => ({ name: a.name, setGroup: a.set_group }))
     ) ?? []
   );
   const [artistInput, setArtistInput] = useState("");
+  // Friends are a flat list of names — no set_group/b2b like artists, so a
+  // plain string[] rather than the FormArtist shape.
+  const [friends, setFriends] = useState<string[]>(
+    initialData?.friends.map((f) => f.name) ?? []
+  );
+  const [friendInput, setFriendInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -58,6 +66,7 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
   const [cityNames, setCityNames] = useState<string[]>([]);
   const [stateNames, setStateNames] = useState<string[]>([]);
   const [artistNames, setArtistNames] = useState<string[]>([]);
+  const [friendNames, setFriendNames] = useState<string[]>([]);
   // A venue name can exist in multiple cities (e.g., "The Independent" in SF
   // and Austin), so the map is lowercased-name → list of locations. Picking
   // a venue only auto-fills the location if it's unambiguous. Rust's
@@ -77,12 +86,18 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
       setStateNames([...new Set(l.map((x) => x.state))]);
     });
     commands.getArtists().then((a) => setArtistNames(a.map((x) => x.name)));
+    commands.getFriends().then((f) => setFriendNames(f.map((x) => x.name)));
   }, []);
 
   const availableArtists = useMemo(() => {
     const taken = new Set(artists.map((fa) => fa.name.toLowerCase()));
     return artistNames.filter((a) => !taken.has(a.toLowerCase()));
   }, [artistNames, artists]);
+
+  const availableFriends = useMemo(() => {
+    const taken = new Set(friends.map((f) => f.toLowerCase()));
+    return friendNames.filter((f) => !taken.has(f.toLowerCase()));
+  }, [friendNames, friends]);
 
   const addArtist = () => {
     const trimmed = artistInput.trim();
@@ -102,6 +117,31 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
 
   const removeArtist = (index: number) => {
     setArtists(artists.filter((_, i) => i !== index));
+  };
+
+  const addFriend = () => {
+    const trimmed = friendInput.trim();
+    if (!trimmed) return;
+    const lowered = trimmed.toLowerCase();
+    if (friends.some((f) => f.toLowerCase() === lowered)) {
+      setFriendInput("");
+      return;
+    }
+    // Snap to existing casing so the chip matches what Rust dedupes to on save.
+    const canonical = friendNames.find((f) => f.toLowerCase() === lowered) ?? trimmed;
+    setFriends([...friends, canonical]);
+    setFriendInput("");
+  };
+
+  const removeFriend = (index: number) => {
+    setFriends(friends.filter((_, i) => i !== index));
+  };
+
+  const handleFriendKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addFriend();
+    }
   };
 
   const sensors = useSensors(
@@ -164,7 +204,9 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
         venue: venue.trim(),
         city: city.trim(),
         state: state.trim().toUpperCase(),
+        notes: notes.trim() || null,
         artists: artists.map((a) => ({ name: a.name, set_group: a.setGroup })),
+        friends,
       });
     } catch (err) {
       setError(String(err));
@@ -328,6 +370,49 @@ export function EventForm({ initialData, onSubmit, title }: EventFormProps) {
               </SortableContext>
             </DndContext>
           )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Friends</Label>
+          <div className="flex gap-2">
+            <Autocomplete
+              value={friendInput}
+              onChange={setFriendInput}
+              suggestions={availableFriends}
+              onKeyDown={handleFriendKeyDown}
+              placeholder="Who did you go with? Type a name and press Enter"
+            />
+            <Button type="button" variant="outline" onClick={addFriend}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+          {friends.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              {friends.map((friend, i) => (
+                <Badge key={`${friend}-${i}`} variant="secondary" className="gap-1">
+                  {friend}
+                  <button
+                    type="button"
+                    onClick={() => removeFriend(i)}
+                    className="hover:text-muted-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="notes">Notes</Label>
+          <Textarea
+            id="notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Anything worth remembering — who you went with, standout sets, travel details…"
+            rows={4}
+          />
         </div>
 
         {error && (
