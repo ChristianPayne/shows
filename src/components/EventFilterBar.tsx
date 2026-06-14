@@ -9,9 +9,10 @@ import type { EventFilter, MatchMode } from "@/bindings";
 
 // Visual builder for the faceted EventFilter. Each facet narrows results and
 // ANDs with the rest (Rust owns the actual matching in query_events); within
-// the friend/artist facets the Any/All toggle picks OR vs AND. The component
-// is fully controlled — it never holds filter state, only the open/typeahead
-// UI state — so the parent can drive the query off a single `filter` object.
+// the friend/artist facets the Any/All toggle picks OR vs AND. Both the filter
+// value and the panel's open state are controlled by the parent, so the whole
+// "where I was" view (including whether the panel is expanded) survives
+// navigating away and back.
 
 interface Entity {
   id: number;
@@ -21,12 +22,13 @@ interface Entity {
 interface EventFilterBarProps {
   filter: EventFilter;
   onChange: (filter: EventFilter) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 const EMPTY_FILTER: EventFilter = { friendIds: [], artistIds: [] };
 
-export function EventFilterBar({ filter, onChange }: EventFilterBarProps) {
-  const [open, setOpen] = useState(false);
+export function EventFilterBar({ filter, onChange, open, onOpenChange }: EventFilterBarProps) {
   const [friends, setFriends] = useState<Entity[]>([]);
   const [artists, setArtists] = useState<Entity[]>([]);
   const [friendInput, setFriendInput] = useState("");
@@ -122,7 +124,7 @@ export function EventFilterBar({ filter, onChange }: EventFilterBarProps) {
           variant="outline"
           size="sm"
           className="gap-2"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => onOpenChange(!open)}
         >
           <Filter className="h-4 w-4" />
           Filters

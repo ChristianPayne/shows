@@ -37,16 +37,45 @@ const HIDDEN_COLUMNS_KEY = "events_hidden_columns";
 
 let lastEventCount = 0;
 
+// The events-list view state, held at module scope so it survives navigating
+// to an event detail and back — the page component unmounts on navigation, so
+// plain useState would reset search/sort/filter every time. Deliberately not
+// persisted to disk: this is session memory ("take me back to where I was"),
+// not a saved preference, so a fresh app launch starts clean. Column
+// visibility is the exception and lives in the settings table on purpose.
+const listView: {
+  search: string;
+  sortKey: EventSortKey;
+  sortDir: SortDir;
+  filter: EventFilter;
+  filterOpen: boolean;
+} = {
+  search: "",
+  sortKey: "date",
+  sortDir: "desc",
+  filter: { friendIds: [], artistIds: [] },
+  filterOpen: false,
+};
+
 export function EventsListPage() {
   const [events, setEvents] = useState<EventDetail[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<EventSortKey>("date");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [search, setSearch] = useState(listView.search);
+  const [sortKey, setSortKey] = useState<EventSortKey>(listView.sortKey);
+  const [sortDir, setSortDir] = useState<SortDir>(listView.sortDir);
   const [hiddenColumns, setHiddenColumns] = useState<EventColumnKey[]>([]);
-  const [filter, setFilter] = useState<EventFilter>({
-    friendIds: [],
-    artistIds: [],
-  });
+  const [filter, setFilter] = useState<EventFilter>(listView.filter);
+  const [filterOpen, setFilterOpen] = useState(listView.filterOpen);
+
+  useEffect(() => {
+    // Mirror the current view into module scope so the next mount restores it.
+    // Kept separate from the query effect so toggling the panel (filterOpen)
+    // persists without triggering a needless re-query.
+    listView.search = search;
+    listView.sortKey = sortKey;
+    listView.sortDir = sortDir;
+    listView.filter = filter;
+    listView.filterOpen = filterOpen;
+  }, [search, sortKey, sortDir, filter, filterOpen]);
 
   useEffect(() => {
     // Rust owns the search/filter/sort — every edit to the input, every
@@ -127,7 +156,12 @@ export function EventsListPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <EventFilterBar filter={filter} onChange={setFilter} />
+      <EventFilterBar
+        filter={filter}
+        onChange={setFilter}
+        open={filterOpen}
+        onOpenChange={setFilterOpen}
+      />
       {events ? (
         <EventsTable
           events={events}
