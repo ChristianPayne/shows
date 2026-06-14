@@ -22,6 +22,13 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  /* Tag color "character": the lightness + chroma every genre color shares.
+     The hue is computed per-tag in JS (family band + hash). Swapping these two
+     (and the family hue bands in tagColor.ts) re-skins all tag colors at once —
+     the seam for a future palette switcher, the same way the accent system
+     rewrites --primary. */
+  --tag-l: 0.6;
+  --tag-c: 0.15;
   --radius: 0.625rem;
   --sidebar-background: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -53,6 +60,9 @@
   --border: oklch(0.32 0 0);
   --input: oklch(0.32 0 0);
   --ring: oklch(0.439 0 0);
+  /* Lifted lightness so the same hues read against the dark background. */
+  --tag-l: 0.72;
+  --tag-c: 0.14;
   --sidebar-background: oklch(0.18 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

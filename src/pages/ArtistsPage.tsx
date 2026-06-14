@@ -21,6 +21,7 @@ import { MatchPickerDialog } from "@/components/MatchPickerDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import { ArtistTagEditor } from "@/components/ArtistTagEditor";
+import { tagChipStyle } from "@/lib/tagColor";
 import { commands } from "@/lib/commands";
 import type {
   ArtistWithCount,
@@ -138,14 +139,13 @@ export function ArtistsListPage() {
                 key={t.key}
                 type="button"
                 onClick={() => toggleTag(t.key)}
-                className={
-                  selected
-                    ? "rounded-full border border-primary bg-primary/10 px-2 py-0.5 text-xs text-foreground"
-                    : "rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
-                }
+                style={tagChipStyle(t.key, { selected })}
+                className={`rounded-full border px-2 py-0.5 text-xs transition-opacity ${
+                  selected ? "" : "opacity-80 hover:opacity-100"
+                }`}
               >
                 {t.display}
-                <span className="ml-1 text-muted-foreground/70">{t.count}</span>
+                <span className="ml-1 opacity-70">{t.count}</span>
               </button>
             );
           })}

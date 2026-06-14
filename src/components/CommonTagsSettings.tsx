@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
 import { commands } from "@/lib/commands";
+import { tagChipStyle } from "@/lib/tagColor";
 
 // Manage the common-tags pool — the common genres seeded at install that the
 // artist "Add a tag" field offers. Removing one here only stops it being
@@ -52,12 +53,17 @@ export function CommonTagsSettings() {
       {commonTags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {commonTags.map((tag) => (
-            <Badge key={tag} variant="secondary" className="gap-1">
+            <Badge
+              key={tag}
+              variant="outline"
+              className="gap-1"
+              style={tagChipStyle(tag)}
+            >
               {tag}
               <button
                 type="button"
                 onClick={() => remove(tag)}
-                className="hover:text-muted-foreground"
+                className="opacity-70 hover:opacity-100"
                 aria-label={`Remove ${tag}`}
               >
                 <X className="h-3 w-3" />

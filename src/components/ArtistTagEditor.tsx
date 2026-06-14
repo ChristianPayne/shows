@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Autocomplete } from "@/components/Autocomplete";
 import { Plus, X, Sparkles } from "lucide-react";
 import { commands } from "@/lib/commands";
+import { tagChipStyle } from "@/lib/tagColor";
 import type { SimilarArtist, TagSuggestion } from "@/bindings";
 
 // User-curated tags for an artist. Tags are deliberate: typed by hand or
@@ -102,12 +103,17 @@ export function ArtistTagEditor({ artistId }: { artistId: number }) {
       {tags.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((tag) => (
-            <Badge key={tag} variant="secondary" className="gap-1">
+            <Badge
+              key={tag}
+              variant="outline"
+              className="gap-1"
+              style={tagChipStyle(tag)}
+            >
               {tag}
               <button
                 type="button"
                 onClick={() => removeTag(tag)}
-                className="hover:text-muted-foreground"
+                className="opacity-70 hover:opacity-100"
                 aria-label={`Remove ${tag}`}
               >
                 <X className="h-3 w-3" />
@@ -140,7 +146,8 @@ export function ArtistTagEditor({ artistId }: { artistId: number }) {
                 key={s.name}
                 type="button"
                 onClick={() => addTag(s.name)}
-                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+                style={tagChipStyle(s.name)}
+                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs opacity-80 hover:opacity-100 transition-opacity"
               >
                 <Plus className="h-3 w-3" />
                 {s.name}
