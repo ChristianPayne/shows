@@ -66,12 +66,22 @@ export function ArtistTagEditor({ artistId }: { artistId: number }) {
       .finally(() => setSuggesting(false));
   };
 
-  // MusicBrainz suggestions the artist doesn't already have, in vote order —
-  // shown as the "tap to add" chips.
-  const openSuggestions = useMemo(
-    () => suggestions.filter((s) => !tags.includes(s.name.toLowerCase())),
-    [suggestions, tags]
+  // Tags already in our system — used on an artist or in the common-tags pool.
+  // A MusicBrainz suggestion matching one is a reuse (keeps discovery intact),
+  // so we outline it and float it to the front.
+  const knownTags = useMemo(
+    () => new Set([...usedTags, ...commonTags]),
+    [usedTags, commonTags]
   );
+
+  // MusicBrainz suggestions the artist doesn't already have, shown as the "tap
+  // to add" chips. Ones already in our system lead — each group keeps the
+  // MusicBrainz vote order — so reusable tags are easy to grab.
+  const openSuggestions = useMemo(() => {
+    const open = suggestions.filter((s) => !tags.includes(s.name.toLowerCase()));
+    const isKnown = (s: TagSuggestion) => knownTags.has(s.name.toLowerCase());
+    return [...open.filter(isKnown), ...open.filter((s) => !isKnown(s))];
+  }, [suggestions, tags, knownTags]);
 
   // The add field's typeahead: the seeded common genres + tags you've already
   // used + any pulled MusicBrainz tags, deduped and minus what's already on
@@ -141,18 +151,24 @@ export function ArtistTagEditor({ artistId }: { artistId: number }) {
         <div className="space-y-1.5">
           <p className="text-xs text-muted-foreground">Tap to add:</p>
           <div className="flex flex-wrap gap-1.5">
-            {openSuggestions.map((s) => (
-              <button
-                key={s.name}
-                type="button"
-                onClick={() => addTag(s.name)}
-                style={tagChipStyle(s.name)}
-                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs opacity-80 hover:opacity-100 transition-opacity"
-              >
-                <Plus className="h-3 w-3" />
-                {s.name}
-              </button>
-            ))}
+            {openSuggestions.map((s) => {
+              const known = knownTags.has(s.name.toLowerCase());
+              return (
+                <button
+                  key={s.name}
+                  type="button"
+                  onClick={() => addTag(s.name)}
+                  style={tagChipStyle(s.name)}
+                  title={known ? "Already in your tags — reuse it" : undefined}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs opacity-80 hover:opacity-100 transition-opacity ${
+                    known ? "ring-2 ring-foreground/70" : ""
+                  }`}
+                >
+                  <Plus className="h-3 w-3" />
+                  {s.name}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
