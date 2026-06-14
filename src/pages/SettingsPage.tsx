@@ -14,24 +14,46 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown, Music, RefreshCcw, Sun, Moon } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown, Music, RefreshCcw, Sun, Moon, Plus, X } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
-import { ACCENT_PRESETS } from "@/lib/accent";
+import { ACCENT_PRESETS, type AccentPreset } from "@/lib/accent";
 import { CsvPreviewDialog } from "@/components/CsvPreviewDialog";
 import { CommonTagsSettings } from "@/components/CommonTagsSettings";
 import { useUpdater } from "@/hooks/useUpdater";
 import { commands } from "@/lib/commands";
 import type { ImportResult, PreviewRow } from "@/bindings";
 
+const isValidHex = (s: string) => /^#[0-9a-fA-F]{6}$/.test(s.trim());
+
 interface SettingsPageProps {
   accentId: string;
+  customAccents: AccentPreset[];
   onAccentChange: (id: string) => void;
+  onAddCustomAccent: (hex: string) => void;
+  onRemoveCustomAccent: (id: string) => void;
   dark: boolean;
   onToggleDark: () => void;
 }
 
-export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: SettingsPageProps) {
+export function SettingsPage({
+  accentId,
+  customAccents,
+  onAccentChange,
+  onAddCustomAccent,
+  onRemoveCustomAccent,
+  dark,
+  onToggleDark,
+}: SettingsPageProps) {
   const [fetchingGenres, setFetchingGenres] = useState(false);
+  const [addAccentOpen, setAddAccentOpen] = useState(false);
+  const [pendingColor, setPendingColor] = useState("#3b82f6");
   const updater = useUpdater();
   const [setlistfmKey, setSetlistfmKey] = useState("");
 
@@ -190,6 +212,42 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
               <span className="text-xs">{preset.label}</span>
             </button>
           ))}
+          {customAccents.map((preset) => (
+            <div key={preset.id} className="group relative">
+              <button
+                onClick={() => onAccentChange(preset.id)}
+                className={`flex flex-col items-center gap-1.5 rounded-lg p-2 transition-colors ${
+                  accentId === preset.id
+                    ? "bg-accent ring-2 ring-primary"
+                    : "hover:bg-accent/50"
+                }`}
+              >
+                <div
+                  className="h-8 w-8 rounded-full border border-border"
+                  style={{ backgroundColor: preset.swatch }}
+                />
+                <span className="text-xs">{preset.label}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemoveCustomAccent(preset.id)}
+                aria-label="Remove custom accent"
+                className="absolute right-0 top-0 hidden h-5 w-5 items-center justify-center rounded-full border bg-background text-muted-foreground hover:text-foreground group-hover:flex"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setAddAccentOpen(true)}
+            className="flex flex-col items-center gap-1.5 rounded-lg p-2 transition-colors hover:bg-accent/50"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground">
+              <Plus className="h-4 w-4" />
+            </div>
+            <span className="text-xs">Custom</span>
+          </button>
           <button
             onClick={onToggleDark}
             className="flex flex-col items-center gap-1.5 rounded-lg p-2 transition-colors hover:bg-accent/50"
@@ -201,6 +259,52 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
             <span className="text-xs">{dark ? "Light" : "Dark"}</span>
           </button>
         </div>
+
+        <Dialog open={addAccentOpen} onOpenChange={setAddAccentOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Custom accent</DialogTitle>
+            </DialogHeader>
+            <div className="flex items-center gap-4">
+              <div
+                className="h-16 w-16 shrink-0 rounded-full border border-border"
+                style={{
+                  backgroundColor: isValidHex(pendingColor)
+                    ? pendingColor
+                    : "transparent",
+                }}
+              />
+              <div className="flex flex-1 items-center gap-2">
+                <input
+                  type="color"
+                  value={isValidHex(pendingColor) ? pendingColor : "#000000"}
+                  onChange={(e) => setPendingColor(e.target.value)}
+                  aria-label="Pick a color"
+                  className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-input bg-transparent p-1"
+                />
+                <Input
+                  value={pendingColor}
+                  onChange={(e) => setPendingColor(e.target.value)}
+                  placeholder="#3b82f6"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAddAccentOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={!isValidHex(pendingColor)}
+                onClick={() => {
+                  onAddCustomAccent(pendingColor.toLowerCase());
+                  setAddAccentOpen(false);
+                }}
+              >
+                Add
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Separator />

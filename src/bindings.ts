@@ -699,6 +699,15 @@ async setSetting(key: string, value: string) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Build a full accent definition from a user-picked hex color. The hex drives
+ * --primary directly (a valid CSS color) for both themes, with a foreground
+ * chosen for contrast. The id derives from the hex so re-adding the same color
+ * de-dupes instead of stacking.
+ */
+async makeCustomAccent(hex: string) : Promise<AccentPreset> {
+    return await TAURI_INVOKE("make_custom_accent", { hex });
+},
 async fetchUpdate() : Promise<Result<UpdateMetadata | null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("fetch_update") };
@@ -727,6 +736,8 @@ async installUpdate(onEvent: TAURI_CHANNEL<DownloadEvent>) : Promise<Result<null
 
 /** user-defined types **/
 
+export type AccentColors = { primary: string; primaryForeground: string }
+export type AccentPreset = { id: string; label: string; swatch: string; light: AccentColors; dark: AccentColors }
 /**
  * Enriched artist info for event detail view — includes attendance context.
  */

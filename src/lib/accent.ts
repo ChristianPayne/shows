@@ -1,11 +1,9 @@
-// Accent color presets — each defines the primary color in oklch for light and dark modes
-export interface AccentPreset {
-  id: string;
-  label: string;
-  swatch: string; // hex for the preview swatch
-  light: { primary: string; primaryForeground: string };
-  dark: { primary: string; primaryForeground: string };
-}
+// Accent color presets — each defines the primary color in oklch for light and
+// dark modes. The AccentPreset shape is generated from Rust (commands/theme),
+// which also derives custom accents from a picked color; this module only holds
+// the built-in presets and applies an accent to the DOM.
+import type { AccentPreset } from "@/bindings";
+export type { AccentPreset };
 
 export const ACCENT_PRESETS: AccentPreset[] = [
   {
@@ -66,8 +64,12 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   },
 ];
 
-export function applyAccent(presetId: string, isDark: boolean) {
-  const preset = ACCENT_PRESETS.find((p) => p.id === presetId) ?? ACCENT_PRESETS[0];
+export function applyAccent(
+  presetId: string,
+  isDark: boolean,
+  accents: AccentPreset[] = ACCENT_PRESETS,
+) {
+  const preset = accents.find((p) => p.id === presetId) ?? ACCENT_PRESETS[0];
   const vars = isDark ? preset.dark : preset.light;
   const root = document.documentElement;
   root.style.setProperty("--primary", vars.primary);

@@ -13,7 +13,7 @@ import { StatsPage } from "@/pages/StatsPage";
 import { MediaPage } from "@/pages/MediaPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { cn } from "@/lib/utils";
-import { applyAccent } from "@/lib/accent";
+import { applyAccent, ACCENT_PRESETS, type AccentPreset } from "@/lib/accent";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
 import {
@@ -69,22 +69,36 @@ function AppLayout() {
     document.documentElement.classList.contains("dark")
   );
   const [accentId, setAccentId] = useState("neutral");
+  const [customAccents, setCustomAccents] = useState<AccentPreset[]>([]);
+  // Built-in presets + the user's saved custom colors, in one list so both the
+  // picker and applyAccent's lookup see every option.
+  const accents = [...ACCENT_PRESETS, ...customAccents];
 
   useEffect(() => {
-    // Load persisted theme and accent
+    // Load persisted theme, accent, and any custom accent colors.
     Promise.all([
       commands.getSetting("theme"),
       commands.getSetting("accent"),
-    ]).then(([themeValue, accentValue]) => {
+      commands.getSetting("custom_accents"),
+    ]).then(([themeValue, accentValue, customJson]) => {
       let isDark = document.documentElement.classList.contains("dark");
       if (themeValue === "dark" || themeValue === "light") {
         isDark = themeValue === "dark";
         setDark(isDark);
         document.documentElement.classList.toggle("dark", isDark);
       }
+      let customs: AccentPreset[] = [];
+      if (customJson) {
+        try {
+          customs = JSON.parse(customJson);
+        } catch {
+          // Malformed stored value — fall back to no custom accents.
+        }
+      }
+      setCustomAccents(customs);
       const accent = accentValue ?? "neutral";
       setAccentId(accent);
-      applyAccent(accent, isDark);
+      applyAccent(accent, isDark, [...ACCENT_PRESETS, ...customs]);
     });
   }, []);
 
@@ -93,7 +107,38 @@ function AppLayout() {
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
     commands.setSetting("theme", next ? "dark" : "light");
-    applyAccent(accentId, next);
+    applyAccent(accentId, next, accents);
+  };
+
+  const selectAccent = (id: string) => {
+    setAccentId(id);
+    applyAccent(id, dark, accents);
+    commands.setSetting("accent", id);
+  };
+
+  const addCustomAccent = async (hex: string) => {
+    const accent = await commands.makeCustomAccent(hex);
+    const next = customAccents.some((c) => c.id === accent.id)
+      ? customAccents
+      : [...customAccents, accent];
+    setCustomAccents(next);
+    commands.setSetting("custom_accents", JSON.stringify(next));
+    // Selecting the freshly added color is the obvious next intent.
+    setAccentId(accent.id);
+    applyAccent(accent.id, dark, [...ACCENT_PRESETS, ...next]);
+    commands.setSetting("accent", accent.id);
+  };
+
+  const removeCustomAccent = (id: string) => {
+    const next = customAccents.filter((c) => c.id !== id);
+    setCustomAccents(next);
+    commands.setSetting("custom_accents", JSON.stringify(next));
+    // Fall back to neutral if the deleted color was the active one.
+    if (accentId === id) {
+      setAccentId("neutral");
+      applyAccent("neutral", dark, [...ACCENT_PRESETS, ...next]);
+      commands.setSetting("accent", "neutral");
+    }
   };
 
   return (
@@ -175,11 +220,10 @@ function AppLayout() {
           <Route path="/settings" element={
             <SettingsPage
               accentId={accentId}
-              onAccentChange={(id) => {
-                setAccentId(id);
-                applyAccent(id, dark);
-                commands.setSetting("accent", id);
-              }}
+              customAccents={customAccents}
+              onAccentChange={selectAccent}
+              onAddCustomAccent={addCustomAccent}
+              onRemoveCustomAccent={removeCustomAccent}
               dark={dark}
               onToggleDark={toggleDark}
             />

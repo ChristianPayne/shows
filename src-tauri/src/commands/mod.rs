@@ -11,4 +11,5 @@ pub mod tags;
 pub mod links;
 pub mod setlists;
 pub mod settings;
+pub mod theme;
 pub mod media;
