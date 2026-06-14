@@ -14,7 +14,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ArrowUpDown, Plus } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ArrowUpDown, MoreHorizontal, UserPlus } from "lucide-react";
 import { SkeletonTableRow } from "@/components/Skeleton";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
@@ -37,6 +49,7 @@ export function FriendsListPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [newFriend, setNewFriend] = useState("");
   const [adding, setAdding] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   // Bumped after a standalone add so the list re-queries and the new
   // (zero-event) friend shows up immediately.
   const [refresh, setRefresh] = useState(0);
@@ -64,6 +77,7 @@ export function FriendsListPage() {
     try {
       await commands.createFriend(name);
       setNewFriend("");
+      setAddOpen(false);
       setRefresh((r) => r + 1);
     } finally {
       setAdding(false);
@@ -89,18 +103,54 @@ export function FriendsListPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-1/2 mx-auto"
         />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="shrink-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setAddOpen(true)}>
+              <UserPlus /> Add friend
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-      <form onSubmit={handleAdd} className="flex gap-2">
-        <Input
-          placeholder="Add a friend by name..."
-          value={newFriend}
-          onChange={(e) => setNewFriend(e.target.value)}
-          className="max-w-xs"
-        />
-        <Button type="submit" variant="outline" disabled={!newFriend.trim() || adding}>
-          <Plus className="h-4 w-4 mr-1" /> Add
-        </Button>
-      </form>
+
+      <Dialog
+        open={addOpen}
+        onOpenChange={(o) => {
+          setAddOpen(o);
+          if (!o) setNewFriend("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Friend</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAdd} className="space-y-4">
+            <Input
+              autoFocus
+              placeholder="Friend's name"
+              value={newFriend}
+              onChange={(e) => setNewFriend(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!newFriend.trim() || adding}>
+                {adding ? "Adding…" : "Add"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Table>
         <TableHeader>
           <TableRow>
