@@ -156,7 +156,7 @@ export function EventFilterBar({ filter, onChange }: EventFilterBarProps) {
           {/* Friends facet */}
           <FacetSection
             label="Friends"
-            showMatch={friendIds.length >= 2}
+            showMatch={friendIds.length >= 1}
             match={friendsMatch}
             onMatchChange={(m) => patch({ friendsMatch: m })}
           >
@@ -183,7 +183,7 @@ export function EventFilterBar({ filter, onChange }: EventFilterBarProps) {
           {/* Artists facet */}
           <FacetSection
             label="Artists"
-            showMatch={artistIds.length >= 2}
+            showMatch={artistIds.length >= 1}
             match={artistsMatch}
             onMatchChange={(m) => patch({ artistsMatch: m })}
           >
@@ -237,7 +237,7 @@ export function EventFilterBar({ filter, onChange }: EventFilterBarProps) {
 
           <p className="text-xs text-muted-foreground">
             All filters combine with AND. Within Friends and Artists, choose
-            Any (match at least one) or All (match every selected).
+            OR (match at least one) or AND (match every selected).
           </p>
         </div>
       )}
@@ -283,22 +283,27 @@ function MatchToggle({
   value: MatchMode;
   onChange: (m: MatchMode) => void;
 }) {
-  const modes: MatchMode[] = ["any", "all"];
+  // Display "OR"/"AND" while the underlying MatchMode stays "any"/"all" (the
+  // Rust enum). "any" = OR (match at least one), "all" = AND (match every).
+  const modes: { mode: MatchMode; label: string }[] = [
+    { mode: "any", label: "OR" },
+    { mode: "all", label: "AND" },
+  ];
   return (
     <div className="inline-flex overflow-hidden rounded-md border text-xs">
-      {modes.map((m) => (
+      {modes.map(({ mode, label }) => (
         <button
-          key={m}
+          key={mode}
           type="button"
-          onClick={() => onChange(m)}
+          onClick={() => onChange(mode)}
           className={cn(
-            "px-2 py-0.5 capitalize transition-colors",
-            value === m
+            "px-2 py-0.5 transition-colors",
+            value === mode
               ? "bg-secondary text-secondary-foreground"
               : "text-muted-foreground hover:bg-accent"
           )}
         >
-          {m}
+          {label}
         </button>
       ))}
     </div>
