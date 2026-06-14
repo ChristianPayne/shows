@@ -47,6 +47,10 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/016_add_notes.sql"),
     // v17: friends + event_friends tables for tagging who you went with
     include_str!("../../migrations/017_add_friends.sql"),
+    // v18: user-curated artist_tags table; wipe the old auto-applied tags/genre
+    include_str!("../../migrations/018_user_curated_tags.sql"),
+    // v19: seed the common_tags table with common genres (user-prunable)
+    include_str!("../../migrations/019_seed_common_tags.sql"),
 ];
 
 /// Initialize the SQLite database, run pending migrations, and return the connection pool.

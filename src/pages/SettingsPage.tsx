@@ -18,6 +18,7 @@ import { Upload, Download, RotateCcw, Trash2, AlertCircle, CheckCircle, FileDown
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { ACCENT_PRESETS } from "@/lib/accent";
 import { CsvPreviewDialog } from "@/components/CsvPreviewDialog";
+import { CommonTagsSettings } from "@/components/CommonTagsSettings";
 import { useUpdater } from "@/hooks/useUpdater";
 import { commands } from "@/lib/commands";
 import type { ImportResult, PreviewRow } from "@/bindings";
@@ -162,7 +163,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
   };
 
   return (
-    <div className="space-y-8 max-w-lg">
+    <div className="space-y-8 max-w-3xl">
       <h1 className="text-2xl font-bold">Settings</h1>
 
       {/* Accent Color */}
@@ -235,7 +236,7 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Data</h2>
 
-        {/* Genres */}
+        {/* Artist info */}
         <div className="rounded-lg border divide-y">
           <button
             className="flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:pointer-events-none"
@@ -244,11 +245,14 @@ export function SettingsPage({ accentId, onAccentChange, dark, onToggleDark }: S
           >
             <Music className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="text-left">
-              <p className="font-medium">{fetchingGenres ? "Fetching..." : "Fetch Genres"}</p>
-              <p className="text-xs text-muted-foreground">Look up genres from MusicBrainz for artists missing them</p>
+              <p className="font-medium">{fetchingGenres ? "Fetching..." : "Fetch Artist Info"}</p>
+              <p className="text-xs text-muted-foreground">Look up country, type, and active years from MusicBrainz. Tags are curated per-artist, not fetched here.</p>
             </div>
           </button>
         </div>
+
+        {/* Common-tags suggestion pool */}
+        <CommonTagsSettings />
 
         {/* CSV */}
         <div className="rounded-lg border divide-y">

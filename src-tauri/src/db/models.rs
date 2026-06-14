@@ -165,6 +165,17 @@ pub struct RelatedArtist {
     pub shared_events: i64,
 }
 
+/// An artist suggested by tag overlap (shares ≥1 curated tag with the subject
+/// artist). `shared_tags` drives the ranking; `event_count` is how many shows
+/// of theirs you've logged, shown alongside the name.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, sqlx::FromRow)]
+pub struct SimilarArtist {
+    pub id: i64,
+    pub name: String,
+    pub shared_tags: i64,
+    pub event_count: i64,
+}
+
 /// Stats summary for the dashboard.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Stats {

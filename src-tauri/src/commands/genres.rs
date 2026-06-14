@@ -10,10 +10,10 @@ pub struct GenreProgress {
     pub done: bool,
 }
 
-/// Metadata parsed from a MusicBrainz artist response.
+/// Metadata parsed from a MusicBrainz artist response. Tags and genre are
+/// deliberately NOT here — those are user-curated now (see commands::tags), so
+/// the background fetch only fills the factual, non-opinionated fields.
 struct ArtistMetadata {
-    genre: String,
-    tags: String,
     country: Option<String>,
     artist_type: Option<String>,
     begin_year: Option<String>,
@@ -99,13 +99,11 @@ pub async fn fetch_genres_bg(
     let mut fetched = 0;
 
     for (i, (artist_id, artist_name)) in artists.iter().enumerate() {
-        let genre = match fetch_artist_metadata(&client, artist_name).await {
+        match fetch_artist_metadata(&client, artist_name).await {
             Ok(Some(meta)) => {
                 sqlx::query(
-                    "UPDATE artists SET genre = ?1, tags = ?2, country = ?3, artist_type = ?4, begin_year = ?5, end_year = ?6, active = ?7, disambiguation = ?8, mbid = ?9 WHERE id = ?10"
+                    "UPDATE artists SET country = ?1, artist_type = ?2, begin_year = ?3, end_year = ?4, active = ?5, disambiguation = ?6, mbid = ?7 WHERE id = ?8"
                 )
-                .bind(&meta.genre)
-                .bind(&meta.tags)
                 .bind(meta.country.as_deref().unwrap_or(""))
                 .bind(meta.artist_type.as_deref().unwrap_or(""))
                 .bind(meta.begin_year.as_deref().unwrap_or(""))
@@ -118,27 +116,25 @@ pub async fn fetch_genres_bg(
                 .await
                 .ok();
                 fetched += 1;
-                Some(meta.genre.clone())
             }
             Ok(None) => {
-                // Mark as checked with empty values so we don't re-fetch
+                // Mark as checked (empty mbid) so we don't re-fetch.
                 sqlx::query(
-                    "UPDATE artists SET genre = '', tags = '', country = '', disambiguation = '', mbid = '' WHERE id = ?1"
+                    "UPDATE artists SET country = '', disambiguation = '', mbid = '' WHERE id = ?1"
                 )
                 .bind(artist_id)
                 .execute(pool)
                 .await
                 .ok();
-                None
             }
-            Err(_) => None,
+            Err(_) => {}
         };
 
         let _ = app_handle.emit("genre-progress", GenreProgress {
             current: i + 1,
             total,
             artist_name: artist_name.clone(),
-            genre,
+            genre: None,
             done: i + 1 == total,
         });
 
@@ -222,24 +218,8 @@ pub async fn apply_musicbrainz_match(
     let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
     let artist: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
 
-    let tags: Vec<(String, i64)> = artist["tags"]
-        .as_array()
-        .map(|arr| {
-            let mut t: Vec<(String, i64)> = arr
-                .iter()
-                .filter_map(|tag| {
-                    let name = tag["name"].as_str()?.to_string();
-                    let count = tag["count"].as_i64().unwrap_or(0);
-                    Some((name, count))
-                })
-                .collect();
-            t.sort_by(|a, b| b.1.cmp(&a.1));
-            t
-        })
-        .unwrap_or_default();
-
-    let genre = tags.first().map(|(n, _)| n.as_str()).unwrap_or("");
-    let all_tags: Vec<&str> = tags.iter().map(|(n, _)| n.as_str()).collect();
+    // Tags are user-curated (commands::tags) — applying a MusicBrainz match
+    // only refreshes the factual metadata + resets links, never the tags.
     let country = artist["country"]
         .as_str()
         .or_else(|| artist["area"]["name"].as_str())
@@ -250,10 +230,8 @@ pub async fn apply_musicbrainz_match(
     let active = artist["life-span"]["ended"].as_bool().map(|b| !b).unwrap_or(true);
 
     sqlx::query(
-        "UPDATE artists SET genre = ?1, tags = ?2, country = ?3, artist_type = ?4, begin_year = ?5, end_year = ?6, active = ?7, disambiguation = ?8, mbid = ?9, link_spotify = NULL, link_instagram = NULL, link_youtube = NULL, link_soundcloud = NULL, link_bandcamp = NULL, link_website = NULL WHERE id = ?10"
+        "UPDATE artists SET country = ?1, artist_type = ?2, begin_year = ?3, end_year = ?4, active = ?5, disambiguation = ?6, mbid = ?7, link_spotify = NULL, link_instagram = NULL, link_youtube = NULL, link_soundcloud = NULL, link_bandcamp = NULL, link_website = NULL WHERE id = ?8"
     )
-    .bind(genre)
-    .bind(all_tags.join(", "))
     .bind(country)
     .bind(artist_type)
     .bind(begin_year)
@@ -277,7 +255,7 @@ pub async fn clear_artist_metadata(
     artist_id: i64,
 ) -> Result<(), String> {
     sqlx::query(
-        "UPDATE artists SET genre = '', tags = '', country = '', artist_type = '', begin_year = '', end_year = '', active = NULL, disambiguation = '', mbid = 'skip', link_spotify = NULL, link_instagram = NULL, link_youtube = NULL, link_soundcloud = NULL, link_bandcamp = NULL, link_website = NULL WHERE id = ?1"
+        "UPDATE artists SET country = '', artist_type = '', begin_year = '', end_year = '', active = NULL, disambiguation = '', mbid = 'skip', link_spotify = NULL, link_instagram = NULL, link_youtube = NULL, link_soundcloud = NULL, link_bandcamp = NULL, link_website = NULL WHERE id = ?1"
     )
     .bind(artist_id)
     .execute(pool.inner())
@@ -303,26 +281,6 @@ async fn fetch_artist_metadata(
         None => return Ok(None),
     };
 
-    // Tags — sorted by popularity
-    let tags: Vec<(String, i64)> = artist["tags"]
-        .as_array()
-        .map(|arr| {
-            let mut t: Vec<(String, i64)> = arr
-                .iter()
-                .filter_map(|tag| {
-                    let name = tag["name"].as_str()?.to_string();
-                    let count = tag["count"].as_i64().unwrap_or(0);
-                    Some((name, count))
-                })
-                .collect();
-            t.sort_by(|a, b| b.1.cmp(&a.1));
-            t
-        })
-        .unwrap_or_default();
-
-    let genre = tags.first().map(|(name, _)| name.clone()).unwrap_or_default();
-    let all_tags: Vec<String> = tags.into_iter().map(|(name, _)| name).collect();
-
     // Try country from top-level, fall back to area name
     let country = artist["country"]
         .as_str()
@@ -336,8 +294,6 @@ async fn fetch_artist_metadata(
     let mbid = artist["id"].as_str().unwrap_or("").to_string();
 
     Ok(Some(ArtistMetadata {
-        genre,
-        tags: all_tags.join(", "),
         country,
         artist_type,
         begin_year,

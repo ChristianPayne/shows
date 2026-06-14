@@ -7,6 +7,7 @@ pub mod entities;
 pub mod stats;
 pub mod maintenance;
 pub mod genres;
+pub mod tags;
 pub mod links;
 pub mod setlists;
 pub mod settings;

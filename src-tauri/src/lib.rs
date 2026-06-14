@@ -6,7 +6,7 @@ mod util;
 
 use std::sync::Mutex;
 
-use commands::{backup, entities, events, export, genres, import, links, maintenance, media, query, setlists, settings, stats};
+use commands::{backup, entities, events, export, genres, import, links, maintenance, media, query, setlists, settings, stats, tags};
 use tauri::Manager;
 
 /// Shared builder construction so `run()` and the bindings-generation test
@@ -71,6 +71,14 @@ pub fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             links::get_artist_links,
             genres::search_musicbrainz,
             genres::apply_musicbrainz_match,
+            tags::get_artist_tags,
+            tags::add_artist_tag,
+            tags::remove_artist_tag,
+            tags::suggest_artist_tags,
+            tags::get_similar_artists_by_tags,
+            tags::get_common_tags,
+            tags::add_common_tag,
+            tags::remove_common_tag,
             media::add_event_media,
             media::get_event_media,
             media::get_media_for_events,

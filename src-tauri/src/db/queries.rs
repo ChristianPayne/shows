@@ -530,9 +530,15 @@ pub async fn get_artist_stats(pool: &SqlitePool, artist_id: i64) -> Result<Artis
     .fetch_optional(pool)
     .await?;
 
-    let (genre, tags, country, artist_type, begin_year, end_year, active, disambiguation) = meta.unwrap_or_default();
+    let (genre, _old_tags, country, artist_type, begin_year, end_year, active, disambiguation) = meta.unwrap_or_default();
     let genre = genre.filter(|g| !g.is_empty());
-    let tags = tags.filter(|t| !t.is_empty());
+    // Tags come from the curated artist_tags table now, not the old CSV column.
+    let tag_list = super::tags::get_artist_tags(pool, artist_id).await?;
+    let tags = if tag_list.is_empty() {
+        None
+    } else {
+        Some(tag_list.join(", "))
+    };
     let country = country.filter(|c| !c.is_empty());
     let disambiguation = disambiguation.filter(|d| !d.is_empty());
 
@@ -778,6 +784,31 @@ pub async fn get_event_by_id(
             }))
         }
     }
+}
+
+/// Other artists in the collection that share at least one tag with the given
+/// artist, ranked by number of shared tags (then by how often you've seen
+/// them). Powers the "similar artists by tags" suggestions on the detail page.
+pub async fn get_similar_artists_by_tags(
+    pool: &SqlitePool,
+    artist_id: i64,
+) -> Result<Vec<SimilarArtist>, sqlx::Error> {
+    sqlx::query_as::<_, SimilarArtist>(
+        "SELECT a.id, a.name,
+                COUNT(DISTINCT mine.tag) AS shared_tags,
+                (SELECT COUNT(*) FROM event_artists ea WHERE ea.artist_id = a.id) AS event_count
+         FROM artist_tags mine
+         JOIN artist_tags theirs
+           ON theirs.tag = mine.tag AND theirs.artist_id != mine.artist_id
+         JOIN artists a ON a.id = theirs.artist_id
+         WHERE mine.artist_id = ?1
+         GROUP BY a.id, a.name
+         ORDER BY shared_tags DESC, event_count DESC, a.name
+         LIMIT 12",
+    )
+    .bind(artist_id)
+    .fetch_all(pool)
+    .await
 }
 
 // ── Entity lists with counts ──
@@ -1420,67 +1451,37 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
     })
 }
 
-/// Aggregate the Top Genres radar data from the MusicBrainz tag lists
-/// stored in `artists.tags`. Each tag on an artist contributes the full
-/// set of attended events that artist played at. Tags are counted by
-/// **distinct event ids** so a festival with five indie bands still only
-/// counts once for "indie", not five times.
-///
-/// The tag column is stored as a comma-separated string — SQLite can't
-/// split comma-joined columns without `json_each` or a recursive CTE, so
-/// the split happens in Rust. We join events → event_artists → artists
-/// once with a single SQL query, then build a `HashMap<tag, HashSet<event_id>>`
-/// in memory. For a personal-tracker-scale DB (hundreds to a few
-/// thousand events), this is cheap and keeps the query itself simple.
+/// Aggregate the Top Genres radar data from the user-curated `artist_tags`.
+/// Each tag on an artist contributes the full set of attended events that
+/// artist played at, counted by **distinct event ids** so a festival with
+/// five indie bands still only counts once for "indie", not five times. We
+/// join events → event_artists → artist_tags once, then bucket
+/// `HashMap<tag, HashSet<event_id>>` in memory — cheap at personal-tracker
+/// scale and keeps the SQL simple.
 async fn top_genres_from_tags(pool: &SqlitePool) -> Result<Vec<GenreCount>, sqlx::Error> {
     let rows: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT DISTINCT e.id, a.tags
+        "SELECT DISTINCT e.id, t.tag
          FROM events e
          JOIN event_artists ea ON ea.event_id = e.id
-         JOIN artists a ON a.id = ea.artist_id
-         WHERE a.tags IS NOT NULL AND a.tags != ''
-           AND e.cancelled = 0 AND e.date <= date('now')",
+         JOIN artist_tags t ON t.artist_id = ea.artist_id
+         WHERE e.cancelled = 0 AND e.date <= date('now')",
     )
     .fetch_all(pool)
     .await?;
 
+    // Tags are already normalized (lowercased) at write time, so bucketing is a
+    // straight group-by — no case folding or display-name reconciliation.
     let mut buckets: std::collections::HashMap<String, std::collections::HashSet<i64>> =
         std::collections::HashMap::new();
 
-    for (event_id, tags_csv) in rows {
-        for tag in super::tags::parse_tags_csv(&tags_csv) {
-            // Normalize case so "Hip Hop" and "hip hop" collapse into one
-            // bucket. Display uses the first-seen spelling below.
-            buckets
-                .entry(tag.to_lowercase())
-                .or_default()
-                .insert(event_id);
-        }
-    }
-
-    // Now materialize with a display name. Re-scan the rows' tags once more
-    // so we use the original casing from the first occurrence of each
-    // lowercased key — stable and cheap for a few dozen buckets.
-    let mut display: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
-    let rescan: Vec<(String,)> = sqlx::query_as(
-        "SELECT DISTINCT tags FROM artists \
-         WHERE tags IS NOT NULL AND tags != ''",
-    )
-    .fetch_all(pool)
-    .await?;
-    for (tags_csv,) in rescan {
-        for tag in super::tags::parse_tags_csv(&tags_csv) {
-            display
-                .entry(tag.to_lowercase())
-                .or_insert(tag);
-        }
+    for (event_id, tag) in rows {
+        buckets.entry(tag).or_default().insert(event_id);
     }
 
     let mut counts: Vec<GenreCount> = buckets
         .into_iter()
-        .map(|(key, set)| GenreCount {
-            name: display.remove(&key).unwrap_or(key),
+        .map(|(tag, set)| GenreCount {
+            name: tag,
             count: set.len() as i64,
         })
         .collect();

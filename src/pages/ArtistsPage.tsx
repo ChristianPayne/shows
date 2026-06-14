@@ -20,6 +20,7 @@ import { MergeDialog } from "@/components/MergeDialog";
 import { MatchPickerDialog } from "@/components/MatchPickerDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
+import { ArtistTagEditor } from "@/components/ArtistTagEditor";
 import { commands } from "@/lib/commands";
 import type {
   ArtistWithCount,
@@ -363,15 +364,12 @@ export function ArtistDetailPage() {
       />
 
       {/* MusicBrainz Profile */}
-      {stats && (stats.genre || stats.country || stats.artist_type || stats.disambiguation) && (
+      {stats && (stats.country || stats.artist_type || stats.disambiguation) && (
         <div className="rounded-lg border p-4 space-y-3">
           {stats.disambiguation && (
             <p className="text-sm text-muted-foreground">{stats.disambiguation}</p>
           )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-            {stats.genre && (
-              <span className="font-medium">{stats.genre}</span>
-            )}
             {stats.artist_type && (
               <span className="text-muted-foreground">{stats.artist_type}</span>
             )}
@@ -384,20 +382,6 @@ export function ArtistDetailPage() {
               </span>
             )}
           </div>
-          {stats.tags && (
-            <div className="flex flex-wrap gap-1.5">
-              {stats.tags.split(", ").map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => navigate(`/artists?tag=${encodeURIComponent(tag.toLowerCase())}`)}
-                  className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          )}
           {artistLinks && (
             <div className="flex flex-wrap gap-3 pt-1">
               {artistLinks.link_spotify && (
@@ -422,6 +406,9 @@ export function ArtistDetailPage() {
           )}
         </div>
       )}
+
+      {/* Tags (user-curated) + similar-by-tags discovery */}
+      <ArtistTagEditor artistId={artist.id} />
 
       {/* Your Attendance */}
       {stats && (

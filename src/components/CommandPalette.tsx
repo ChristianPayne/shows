@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Command } from "cmdk";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -21,6 +21,8 @@ export function CommandPalette() {
   const [venues, setVenues] = useState<VenueWithCount[]>([]);
   const [locations, setLocations] = useState<LocationWithCount[]>([]);
   const [friends, setFriends] = useState<FriendWithCount[]>([]);
+  // cmdk's selected item, controlled so we can force it to the top row.
+  const [value, setValue] = useState("");
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -56,12 +58,26 @@ export function CommandPalette() {
     });
   }, [open, search]);
 
-  const noResults =
-    artists.length === 0 &&
-    events.length === 0 &&
-    venues.length === 0 &&
-    locations.length === 0 &&
-    friends.length === 0;
+  // Flatten the results in render order. cmdk won't re-select the top item on
+  // its own when the list is externally driven (shouldFilter=false) and
+  // swapped out on every keystroke, so we keep cmdk's value pinned to the
+  // first row — that's what lets you type and just hit Enter.
+  const items = useMemo(
+    () => [
+      ...artists.map((a) => `artist-${a.id}`),
+      ...friends.map((f) => `friend-${f.id}`),
+      ...events.map((e) => `event-${e.id}`),
+      ...venues.map((v) => `venue-${v.id}`),
+      ...locations.map((l) => `location-${l.id}`),
+    ],
+    [artists, friends, events, venues, locations]
+  );
+
+  useEffect(() => {
+    setValue(items[0] ?? "");
+  }, [items]);
+
+  const noResults = items.length === 0;
 
   const go = (path: string) => {
     navigate(path);
@@ -73,7 +89,12 @@ export function CommandPalette() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="p-0 max-w-lg overflow-hidden [&>button]:hidden">
-        <Command className="border-none" shouldFilter={false}>
+        <Command
+          className="border-none"
+          shouldFilter={false}
+          value={value}
+          onValueChange={setValue}
+        >
           <Command.Input
             value={search}
             onValueChange={setSearch}
@@ -92,14 +113,12 @@ export function CommandPalette() {
                 {artists.map((artist) => (
                   <Command.Item
                     key={`artist-${artist.id}`}
+                    value={`artist-${artist.id}`}
                     onSelect={() => go(`/artists/${artist.id}`)}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer aria-selected:bg-accent"
                   >
                     <Mic2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="truncate">{artist.name}</span>
-                    {artist.genre && artist.genre !== "" && (
-                      <span className="ml-auto text-xs text-muted-foreground shrink-0">{artist.genre}</span>
-                    )}
                   </Command.Item>
                 ))}
               </Command.Group>
@@ -110,6 +129,7 @@ export function CommandPalette() {
                 {friends.map((friend) => (
                   <Command.Item
                     key={`friend-${friend.id}`}
+                    value={`friend-${friend.id}`}
                     onSelect={() => go(`/friends/${friend.id}`)}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer aria-selected:bg-accent"
                   >
@@ -125,6 +145,7 @@ export function CommandPalette() {
                 {events.map((event) => (
                   <Command.Item
                     key={`event-${event.id}`}
+                    value={`event-${event.id}`}
                     onSelect={() => go(`/events/${event.id}`)}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer aria-selected:bg-accent"
                   >
@@ -143,6 +164,7 @@ export function CommandPalette() {
                 {venues.map((venue) => (
                   <Command.Item
                     key={`venue-${venue.id}`}
+                    value={`venue-${venue.id}`}
                     onSelect={() => go(`/venues/${venue.id}`)}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer aria-selected:bg-accent"
                   >
@@ -161,6 +183,7 @@ export function CommandPalette() {
                 {locations.map((loc) => (
                   <Command.Item
                     key={`location-${loc.id}`}
+                    value={`location-${loc.id}`}
                     onSelect={() => go(`/locations/${loc.id}`)}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer aria-selected:bg-accent"
                   >

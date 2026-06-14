@@ -501,6 +501,97 @@ async applyMusicbrainzMatch(artistId: number, mbid: string) : Promise<Result<nul
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * The artist's current curated tags.
+ */
+async getArtistTags(artistId: number) : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_artist_tags", { artistId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Save a tag onto an artist. Normalized + idempotent (see `db::tags`).
+ */
+async addArtistTag(artistId: number, tag: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_artist_tag", { artistId, tag }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Remove a tag from an artist.
+ */
+async removeArtistTag(artistId: number, tag: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_artist_tag", { artistId, tag }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Pull tag *suggestions* for an artist from MusicBrainz. Prefers an exact
+ * lookup by the stored MBID; falls back to a name search. Returns the
+ * folksonomy tags sorted by vote count. Writes nothing — the user decides
+ * which to save via `add_artist_tag`.
+ */
+async suggestArtistTags(artistId: number) : Promise<Result<TagSuggestion[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("suggest_artist_tags", { artistId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Artists in the collection that share tags with this one, ranked by overlap.
+ */
+async getSimilarArtistsByTags(artistId: number) : Promise<Result<SimilarArtist[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_similar_artists_by_tags", { artistId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The common-tags suggestion pool (seeded common genres + anything you added).
+ */
+async getCommonTags() : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_common_tags") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Add a tag to the common-tags pool.
+ */
+async addCommonTag(tag: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_common_tag", { tag }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Remove a tag from the common-tags pool (leaves applied tags untouched).
+ */
+async removeCommonTag(tag: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_common_tag", { tag }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async addEventMedia(eventId: number, sourcePath: string) : Promise<Result<EventMedia, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("add_event_media", { eventId, sourcePath }) };
@@ -782,6 +873,12 @@ export type PreviewStatus = { kind: "Ok" } | { kind: "Duplicate" } | { kind: "Ve
 export type RelatedArtist = { id: number; name: string; shared_events: number }
 export type SetlistResult = { event_date: string; venue_name: string; city: string; songs: SetlistSong[]; url: string }
 export type SetlistSong = { name: string; info: string | null; tape: boolean }
+/**
+ * An artist suggested by tag overlap (shares ≥1 curated tag with the subject
+ * artist). `shared_tags` drives the ranking; `event_count` is how many shows
+ * of theirs you've logged, shown alongside the name.
+ */
+export type SimilarArtist = { id: number; name: string; shared_tags: number; event_count: number }
 export type SortDir = "asc" | "desc"
 /**
  * Stats summary for the dashboard.
@@ -808,6 +905,12 @@ export type TAURI_CHANNEL<TSend> = null
  * artists that carry this tag.
  */
 export type TagCount = { key: string; display: string; count: number }
+/**
+ * A candidate tag offered by MusicBrainz, with its community vote count so the
+ * UI can surface the most-agreed-upon tags first. Suggestions are never
+ * written to the DB on their own — the user clicks the ones they want.
+ */
+export type TagSuggestion = { name: string; count: number }
 /**
  * A not-yet-attended event plus the relative-time value used by the
  * dashboard. Wrapping `EventDetail` (rather than adding a `days_until`
