@@ -80,11 +80,55 @@ fn apply_dir(cmp: std::cmp::Ordering, dir: SortDir) -> std::cmp::Ordering {
 
 // ── Events ────────────────────────────────────────────────────────────────
 
+/// Within a multi-value facet (friends, artists), choose whether the event
+/// must include *every* selected value (`All` → AND) or *at least one*
+/// (`Any` → OR).
+#[derive(Debug, Clone, Copy, Deserialize, serde::Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum MatchMode {
+    All,
+    Any,
+}
+
+/// Structured, faceted event filter. Each populated facet ANDs with the rest;
+/// an empty facet imposes no constraint. The friend/artist facets match by id
+/// and use `*_match` to pick AND vs OR *within* that facet; the text facets are
+/// case-insensitive substring matches against a single field.
+///
+/// Faceted by design: facets only ever combine with AND — there is no
+/// cross-facet OR (e.g. "friend Alice OR artist X"). That was the deliberate
+/// trade for a predictable builder UI. The predicates are kept flat and
+/// independent so a future grouped/boolean model could compose these same
+/// helpers without rewriting them.
+#[derive(Debug, Default, Deserialize, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct EventFilter {
+    #[serde(default)]
+    pub friend_ids: Vec<i64>,
+    #[specta(optional)]
+    pub friends_match: Option<MatchMode>,
+    #[serde(default)]
+    pub artist_ids: Vec<i64>,
+    #[specta(optional)]
+    pub artists_match: Option<MatchMode>,
+    #[specta(optional)]
+    pub name: Option<String>,
+    #[specta(optional)]
+    pub venue: Option<String>,
+    #[specta(optional)]
+    pub city: Option<String>,
+    #[specta(optional)]
+    pub state: Option<String>,
+}
+
 #[derive(Debug, Deserialize, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct EventsQueryInput {
     #[specta(optional)]
     pub query: Option<String>,
+    /// Structured facets, ANDed on top of the free-text `query`.
+    #[specta(optional)]
+    pub filter: Option<EventFilter>,
     #[specta(optional)]
     pub sort_key: Option<EventSortKey>,
     #[specta(optional)]
@@ -104,6 +148,47 @@ fn filter_events(events: &mut Vec<EventDetail>, query_lower: &str) {
                 .any(|set| set.artists.iter().any(|a| contains_ci(&a.name, query_lower)))
             || e.friends.iter().any(|f| contains_ci(&f.name, query_lower))
     });
+}
+
+/// Membership test for an id facet. An empty selection means "no constraint",
+/// so it always passes — the facet only narrows results once the user picks
+/// something. `present` is the set of ids actually on the event.
+fn id_facet(present: &HashSet<i64>, selected: &[i64], mode: MatchMode) -> bool {
+    if selected.is_empty() {
+        return true;
+    }
+    match mode {
+        MatchMode::All => selected.iter().all(|id| present.contains(id)),
+        MatchMode::Any => selected.iter().any(|id| present.contains(id)),
+    }
+}
+
+/// Case-insensitive substring facet. A blank/whitespace-only needle is treated
+/// as "no constraint" (reusing `normalize_query`'s trim+empty handling).
+fn text_facet(haystack: &str, needle: Option<&str>) -> bool {
+    match normalize_query(needle) {
+        Some(n) => contains_ci(haystack, &n),
+        None => true,
+    }
+}
+
+/// Evaluate the full faceted filter against one event. Every facet must pass
+/// (AND). Defaults: a missing match-mode falls back to `Any` (the looser,
+/// less-surprising choice for a freshly added facet).
+fn matches_event_filter(e: &EventDetail, f: &EventFilter) -> bool {
+    let friends: HashSet<i64> = e.friends.iter().map(|fr| fr.id).collect();
+    let artists: HashSet<i64> = e
+        .artist_sets
+        .iter()
+        .flat_map(|s| s.artists.iter().map(|a| a.id))
+        .collect();
+
+    id_facet(&friends, &f.friend_ids, f.friends_match.unwrap_or(MatchMode::Any))
+        && id_facet(&artists, &f.artist_ids, f.artists_match.unwrap_or(MatchMode::Any))
+        && text_facet(&e.name, f.name.as_deref())
+        && text_facet(&e.venue, f.venue.as_deref())
+        && text_facet(&e.city, f.city.as_deref())
+        && text_facet(&e.state, f.state.as_deref())
 }
 
 /// Shared across `query_events` and the entity-scoped `get_events_for_*`
@@ -137,6 +222,10 @@ pub async fn query_events(
 
     if let Some(q) = normalize_query(input.query.as_deref()) {
         filter_events(&mut events, &q);
+    }
+
+    if let Some(f) = &input.filter {
+        events.retain(|e| matches_event_filter(e, f));
     }
 
     let key = input.sort_key.unwrap_or(EventSortKey::Date);
@@ -413,5 +502,36 @@ mod tests {
         assert_eq!(normalize_query(Some("")), None);
         assert_eq!(normalize_query(Some("   ")), None);
         assert_eq!(normalize_query(Some("  Nine  ")), Some("nine".to_string()));
+    }
+
+    #[test]
+    fn id_facet_empty_selection_is_unconstrained() {
+        let present: HashSet<i64> = [1, 2, 3].into_iter().collect();
+        assert!(id_facet(&present, &[], MatchMode::All));
+        assert!(id_facet(&present, &[], MatchMode::Any));
+    }
+
+    #[test]
+    fn id_facet_all_requires_every_selected() {
+        let present: HashSet<i64> = [1, 2, 3].into_iter().collect();
+        assert!(id_facet(&present, &[1, 2], MatchMode::All));
+        assert!(!id_facet(&present, &[1, 9], MatchMode::All));
+    }
+
+    #[test]
+    fn id_facet_any_requires_at_least_one() {
+        let present: HashSet<i64> = [1, 2, 3].into_iter().collect();
+        assert!(id_facet(&present, &[1, 9], MatchMode::Any));
+        assert!(!id_facet(&present, &[8, 9], MatchMode::Any));
+    }
+
+    #[test]
+    fn text_facet_is_case_insensitive_and_blank_is_unconstrained() {
+        assert!(text_facet("Red Rocks", Some("rocks")));
+        assert!(text_facet("Red Rocks", Some("  ROCKS ")));
+        assert!(!text_facet("Red Rocks", Some("fillmore")));
+        // None and whitespace-only impose no constraint.
+        assert!(text_facet("Red Rocks", None));
+        assert!(text_facet("Red Rocks", Some("   ")));
     }
 }

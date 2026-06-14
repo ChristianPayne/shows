@@ -1,9 +1,24 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { EventsTable } from "@/components/EventsTable";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  EventsTable,
+  EVENT_COLUMNS,
+  type EventColumnKey,
+} from "@/components/EventsTable";
+import { EventFilterBar } from "@/components/EventFilterBar";
 import { EventDetailView } from "@/components/EventDetail";
-import { EventForm } from "@/components/EventForm";
+import { CreateEventForm, EditEventForm } from "@/components/EventForm";
 import { SkeletonTableRow } from "@/components/Skeleton";
 import { commands } from "@/lib/commands";
 import type {
@@ -11,7 +26,14 @@ import type {
   CreateEventInput,
   EventSortKey,
   SortDir,
+  EventFilter,
 } from "@/bindings";
+
+// Persisted as a JSON array of the columns the user has *hidden* (rather
+// than the ones shown). Storing the hidden set means any column added to
+// EVENT_COLUMNS in the future defaults to visible instead of disappearing
+// for users whose saved preference predates it.
+const HIDDEN_COLUMNS_KEY = "events_hidden_columns";
 
 let lastEventCount = 0;
 
@@ -20,17 +42,55 @@ export function EventsListPage() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<EventSortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [hiddenColumns, setHiddenColumns] = useState<EventColumnKey[]>([]);
+  const [filter, setFilter] = useState<EventFilter>({
+    friendIds: [],
+    artistIds: [],
+  });
 
   useEffect(() => {
-    // Rust owns the search/filter/sort — every edit to the input and every
-    // column click re-queries the backend. Personal-scale data, so a full
-    // round-trip per keystroke is fine and avoids any drift between the
-    // two codebases about how matching / ordering should work.
-    commands.queryEvents({ query: search, sortKey, sortDir }).then((data) => {
-      lastEventCount = data.length;
-      setEvents(data);
+    // Rust owns the search/filter/sort — every edit to the input, every
+    // column click, and every facet change re-queries the backend. Personal-
+    // scale data, so a full round-trip per keystroke is fine and avoids any
+    // drift between the two codebases about how matching / ordering should
+    // work. `filter` is the structured faceted filter; it ANDs on top of the
+    // free-text `search`.
+    commands
+      .queryEvents({ query: search, filter, sortKey, sortDir })
+      .then((data) => {
+        lastEventCount = data.length;
+        setEvents(data);
+      });
+  }, [search, sortKey, sortDir, filter]);
+
+  useEffect(() => {
+    // Restore the persisted column-visibility choice on mount, mirroring
+    // how App.tsx restores the saved theme via the same settings table.
+    commands.getSetting(HIDDEN_COLUMNS_KEY).then((json) => {
+      if (!json) return;
+      try {
+        setHiddenColumns(JSON.parse(json));
+      } catch {
+        // Malformed stored value — fall back to all columns visible.
+      }
     });
-  }, [search, sortKey, sortDir]);
+  }, []);
+
+  const toggleColumn = (key: EventColumnKey) => {
+    setHiddenColumns((prev) => {
+      const next = prev.includes(key)
+        ? prev.filter((k) => k !== key)
+        : [...prev, key];
+      // Save immediately, same as the theme toggle — no debounce needed at
+      // personal scale, and it keeps the on-disk state in sync per click.
+      commands.setSetting(HIDDEN_COLUMNS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const visibleColumns = EVENT_COLUMNS.map((c) => c.key).filter(
+    (k) => !hiddenColumns.includes(k)
+  );
 
   return (
     <div className="space-y-4">
@@ -42,7 +102,32 @@ export function EventsListPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-1/2 mx-auto"
         />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2 shrink-0">
+              <SlidersHorizontal className="h-4 w-4" />
+              Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {EVENT_COLUMNS.map((col) => (
+              <DropdownMenuCheckboxItem
+                key={col.key}
+                checked={!hiddenColumns.includes(col.key)}
+                onCheckedChange={() => toggleColumn(col.key)}
+                // Keep the menu open so several columns can be toggled in one
+                // pass instead of reopening it for each change.
+                onSelect={(e) => e.preventDefault()}
+              >
+                {col.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+      <EventFilterBar filter={filter} onChange={setFilter} />
       {events ? (
         <EventsTable
           events={events}
@@ -52,6 +137,7 @@ export function EventsListPage() {
             setSortKey(k);
             setSortDir(d);
           }}
+          visibleColumns={visibleColumns}
         />
       ) : (
         <table className="w-full">
@@ -115,7 +201,6 @@ export function EventDetailPage() {
 }
 
 export function EventEditPage() {
-  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -140,17 +225,14 @@ export function EventEditPage() {
     return <p className="text-muted-foreground">Event not found.</p>;
   }
 
-  const handleUpdate = async (input: CreateEventInput) => {
-    await commands.updateEvent(event.id, input);
-
-    navigate(`/events/${event.id}`, { replace: true });
-  };
-
+  // No navigation on save — editing is a live surface; the user leaves via the
+  // back button. updateEvent persists the whole event from the built input.
   return (
-    <EventForm
-      title="Edit Event"
+    <EditEventForm
       initialData={event}
-      onSubmit={handleUpdate}
+      onAutoSave={async (input) => {
+        await commands.updateEvent(event.id, input);
+      }}
     />
   );
 }
@@ -164,10 +246,5 @@ export function EventNewPage() {
     navigate(`/events/${newId}`);
   };
 
-  return (
-    <EventForm
-      title="Add Event"
-      onSubmit={handleCreate}
-    />
-  );
+  return <CreateEventForm onSubmit={handleCreate} />;
 }

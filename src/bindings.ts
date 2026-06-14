@@ -697,6 +697,19 @@ export type EntitySortKey = "name" | "count"
  */
 export type EventDetail = { id: number; name: string; date: string; end_date: string | null; notes: string | null; cancelled: boolean; venue: string; city: string; state: string; artist_sets: ArtistSet[]; friends: Friend[]; venue_id: number; location_id: number }
 /**
+ * Structured, faceted event filter. Each populated facet ANDs with the rest;
+ * an empty facet imposes no constraint. The friend/artist facets match by id
+ * and use `*_match` to pick AND vs OR *within* that facet; the text facets are
+ * case-insensitive substring matches against a single field.
+ * 
+ * Faceted by design: facets only ever combine with AND — there is no
+ * cross-facet OR (e.g. "friend Alice OR artist X"). That was the deliberate
+ * trade for a predictable builder UI. The predicates are kept flat and
+ * independent so a future grouped/boolean model could compose these same
+ * helpers without rewriting them.
+ */
+export type EventFilter = { friendIds?: number[]; friendsMatch?: MatchMode | null; artistIds?: number[]; artistsMatch?: MatchMode | null; name?: string | null; venue?: string | null; city?: string | null; state?: string | null }
+/**
  * Media row with its computed absolute filesystem path, ready to be wrapped
  * by the frontend's `convertFileSrc`. `event_name` / `event_date` are
  * populated by the bulk query for cross-entity galleries; on single-event
@@ -704,7 +717,11 @@ export type EventDetail = { id: number; name: string; date: string; end_date: st
  */
 export type EventMedia = { id: number; event_id: number; filename: string; mime_type: string; file_size: number; caption: string | null; created_at: string; captured_at: string | null; absolute_path: string; event_name: string | null; event_date: string | null }
 export type EventSortKey = "date" | "name" | "venue" | "location"
-export type EventsQueryInput = { query?: string | null; sortKey?: EventSortKey | null; sortDir?: SortDir | null; limit?: number | null }
+export type EventsQueryInput = { query?: string | null; 
+/**
+ * Structured facets, ANDed on top of the free-text `query`.
+ */
+filter?: EventFilter | null; sortKey?: EventSortKey | null; sortDir?: SortDir | null; limit?: number | null }
 /**
  * A friend you attended an event with. Deliberately minimal (id + name) —
  * friends have none of the metadata artists accumulate. Carried inline on
@@ -725,6 +742,12 @@ export type GenreCount = { name: string; count: number }
 export type ImportResult = { events_created: number; events_skipped: number; artists_created: number; venues_created: number; locations_created: number }
 export type LocationWithCount = { id: number; city: string; state: string; event_count: number }
 export type LocationsQueryInput = { query?: string | null; sortKey?: EntitySortKey | null; sortDir?: SortDir | null; limit?: number | null }
+/**
+ * Within a multi-value facet (friends, artists), choose whether the event
+ * must include *every* selected value (`All` → AND) or *at least one*
+ * (`Any` → OR).
+ */
+export type MatchMode = "all" | "any"
 /**
  * Photo/video counts for the Media page tab strip. Kept as a tiny
  * dedicated shape rather than returning a generic map so serde generates

@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArtistBadgeList, EntityLink } from "@/components/EntityLink";
+import { ArtistBadgeList, FriendBadgeList, EntityLink } from "@/components/EntityLink";
 import { ArrowUpDown } from "lucide-react";
 import type { EventDetail, EventSortKey, SortDir } from "@/bindings";
 
@@ -17,11 +17,36 @@ import type { EventDetail, EventSortKey, SortDir } from "@/bindings";
 // sort state. Column clicks emit `onSortChange`; the parent decides
 // whether to re-fetch.
 
+// Single source of truth for the toggleable columns. The "#" row-number
+// column is intentionally not here — it's always shown. Keys for sortable
+// columns deliberately match their EventSortKey so the picker and the
+// sort logic stay in lockstep.
+export type EventColumnKey =
+  | "date"
+  | "name"
+  | "artists"
+  | "friends"
+  | "venue"
+  | "location";
+
+export const EVENT_COLUMNS: { key: EventColumnKey; label: string }[] = [
+  { key: "date", label: "Date" },
+  { key: "name", label: "Event" },
+  { key: "artists", label: "Artists" },
+  { key: "friends", label: "Friends" },
+  { key: "venue", label: "Venue" },
+  { key: "location", label: "Location" },
+];
+
 interface EventsTableProps {
   events: EventDetail[];
   sortKey: EventSortKey;
   sortDir: SortDir;
   onSortChange: (key: EventSortKey, dir: SortDir) => void;
+  // Which toggleable columns to render, in case the caller wants a subset.
+  // Defaults to all columns so entity detail pages (artist/venue/etc.) keep
+  // showing everything without opting into the picker.
+  visibleColumns?: EventColumnKey[];
 }
 
 export function EventsTable({
@@ -29,8 +54,10 @@ export function EventsTable({
   sortKey,
   sortDir,
   onSortChange,
+  visibleColumns = EVENT_COLUMNS.map((c) => c.key),
 }: EventsTableProps) {
   const navigate = useNavigate();
+  const show = (key: EventColumnKey) => visibleColumns.includes(key);
 
   const toggleSort = (key: EventSortKey) => {
     if (key === sortKey) {
@@ -65,17 +92,23 @@ export function EventsTable({
       <TableHeader>
         <TableRow>
           <TableHead className="w-10 text-muted-foreground">#</TableHead>
-          <SortHeader label="Date" sortKeyName="date" />
-          <SortHeader label="Event" sortKeyName="name" />
-          <TableHead>Artists</TableHead>
-          <SortHeader label="Venue" sortKeyName="venue" />
-          <SortHeader label="Location" sortKeyName="location" />
+          {show("date") && <SortHeader label="Date" sortKeyName="date" />}
+          {show("name") && <SortHeader label="Event" sortKeyName="name" />}
+          {show("artists") && <TableHead>Artists</TableHead>}
+          {show("friends") && <TableHead>Friends</TableHead>}
+          {show("venue") && <SortHeader label="Venue" sortKeyName="venue" />}
+          {show("location") && (
+            <SortHeader label="Location" sortKeyName="location" />
+          )}
         </TableRow>
       </TableHeader>
       <TableBody>
         {events.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={6} className="text-center text-muted-foreground">
+            <TableCell
+              colSpan={visibleColumns.length + 1}
+              className="text-center text-muted-foreground"
+            >
               No events found
             </TableCell>
           </TableRow>
@@ -87,31 +120,46 @@ export function EventsTable({
               onClick={() => navigate(`/events/${event.id}`)}
             >
               <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
-              <TableCell className="whitespace-nowrap">
-                {formatDate(event.date)}
-                {event.end_date && ` — ${formatDate(event.end_date)}`}
-              </TableCell>
-              <TableCell className="font-medium">
-                <span className={event.cancelled ? "line-through" : ""}>
-                  {event.name}
-                </span>
-                {event.cancelled && (
-                  <span className="ml-2 text-xs text-muted-foreground">(Cancelled)</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <ArtistBadgeList sets={event.artist_sets} />
-              </TableCell>
-              <TableCell>
-                <EntityLink to={`/venues/${event.venue_id}`}>
-                  {event.venue}
-                </EntityLink>
-              </TableCell>
-              <TableCell className="whitespace-nowrap">
-                <EntityLink to={`/locations/${event.location_id}`}>
-                  {event.city}, {event.state}
-                </EntityLink>
-              </TableCell>
+              {show("date") && (
+                <TableCell className="whitespace-nowrap">
+                  {formatDate(event.date)}
+                  {event.end_date && ` — ${formatDate(event.end_date)}`}
+                </TableCell>
+              )}
+              {show("name") && (
+                <TableCell className="font-medium">
+                  <span className={event.cancelled ? "line-through" : ""}>
+                    {event.name}
+                  </span>
+                  {event.cancelled && (
+                    <span className="ml-2 text-xs text-muted-foreground">(Cancelled)</span>
+                  )}
+                </TableCell>
+              )}
+              {show("artists") && (
+                <TableCell>
+                  <ArtistBadgeList sets={event.artist_sets} />
+                </TableCell>
+              )}
+              {show("friends") && (
+                <TableCell>
+                  <FriendBadgeList friends={event.friends} />
+                </TableCell>
+              )}
+              {show("venue") && (
+                <TableCell>
+                  <EntityLink to={`/venues/${event.venue_id}`}>
+                    {event.venue}
+                  </EntityLink>
+                </TableCell>
+              )}
+              {show("location") && (
+                <TableCell className="whitespace-nowrap">
+                  <EntityLink to={`/locations/${event.location_id}`}>
+                    {event.city}, {event.state}
+                  </EntityLink>
+                </TableCell>
+              )}
             </TableRow>
           ))
         )}

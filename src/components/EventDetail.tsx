@@ -19,7 +19,7 @@ import {
 import { MediaGallery } from "@/components/MediaGallery";
 import { MediaUploadButton } from "@/components/MediaUploadButton";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, ChevronDown, ChevronUp, CheckSquare, Trash2, X, ListMusic } from "lucide-react";
+import { ExternalLink, ChevronDown, ChevronUp, CheckSquare, Trash2, X, ListMusic, Pencil } from "lucide-react";
 import { commands } from "@/lib/commands";
 import type {
   EventDetail as EventDetailType,
@@ -81,13 +81,21 @@ export function EventDetailView({
             )}
           </div>
         </div>
-        <ActionsMenu
-          onEdit={onEdit}
-          editLabel="Edit"
-          onCancel={() => onToggleCancelled(event.id, !event.cancelled)}
-          cancelled={event.cancelled}
-          onDelete={() => onDelete(event.id)}
-        />
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onEdit}
+            aria-label="Edit"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <ActionsMenu
+            onCancel={() => onToggleCancelled(event.id, !event.cancelled)}
+            cancelled={event.cancelled}
+            onDelete={() => onDelete(event.id)}
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -121,6 +129,24 @@ export function EventDetailView({
           </p>
         </div>
       </div>
+
+      {event.friends.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground mr-1">
+            Friends
+          </span>
+          {event.friends.map((friend) => (
+            <Link key={friend.id} to={`/friends/${friend.id}`}>
+              <Badge
+                variant="secondary"
+                className="text-xs px-2 py-0 cursor-pointer hover:bg-secondary/70"
+              >
+                {friend.name}
+              </Badge>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-3">
@@ -178,23 +204,6 @@ export function EventDetailView({
           })}
         </div>
       </div>
-
-      {event.friends.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium text-muted-foreground mb-2">
-            Friends ({event.friends.length})
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {event.friends.map((friend) => (
-              <Link key={friend.id} to={`/friends/${friend.id}`}>
-                <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/70">
-                  {friend.name}
-                </Badge>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
 
       {event.notes && (
         <div>

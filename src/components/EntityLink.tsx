@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import type { ArtistSet } from "@/bindings";
+import type { ArtistSet, Friend } from "@/bindings";
 
 interface EntityLinkProps {
   to: string;
@@ -76,6 +76,31 @@ export function ArtistBadgeList({ sets }: { sets: ArtistSet[] }) {
           </Badge>
         );
       })}
+    </div>
+  );
+}
+
+/** Friend badge that navigates to the friend's detail view on click. */
+export function FriendBadge({ name, friendId }: { name: string; friendId: number }) {
+  return (
+    <Link to={`/friends/${friendId}`} onClick={(e) => e.stopPropagation()}>
+      <Badge
+        variant="secondary"
+        className="cursor-pointer hover:bg-secondary/70 hover:underline transition-colors"
+      >
+        {name}
+      </Badge>
+    </Link>
+  );
+}
+
+/** Renders a list of friends as clickable badges. */
+export function FriendBadgeList({ friends }: { friends: Friend[] }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {friends.map((friend) => (
+        <FriendBadge key={friend.id} name={friend.name} friendId={friend.id} />
+      ))}
     </div>
   );
 }
