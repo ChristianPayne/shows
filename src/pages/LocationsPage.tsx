@@ -19,6 +19,7 @@ import { MergeDialog } from "@/components/MergeDialog";
 import { EditableLocation } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import { commands } from "@/lib/commands";
+import { useEntityListView } from "@/hooks/useEntityListView";
 import type {
   LocationWithCount,
   EventDetail,
@@ -32,9 +33,8 @@ let lastLocationCount = 0;
 export function LocationsListPage() {
   const navigate = useNavigate();
   const [locations, setLocations] = useState<LocationWithCount[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<EntitySortKey>("count");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const { search, setSearch, sortKey, setSortKey, sortDir, setSortDir } =
+    useEntityListView("locations");
 
   const [locationEvents, setLocationEvents] = useState<Map<number, string[]>>(new Map());
 

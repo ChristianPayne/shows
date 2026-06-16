@@ -32,6 +32,7 @@ import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import { useStreamerMode } from "@/lib/streamerMode";
 import { commands } from "@/lib/commands";
+import { useEntityListView } from "@/hooks/useEntityListView";
 import type {
   FriendWithCount,
   EventDetail,
@@ -45,9 +46,8 @@ let lastFriendCount = 0;
 export function FriendsListPage() {
   const navigate = useNavigate();
   const [friends, setFriends] = useState<FriendWithCount[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<EntitySortKey>("count");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const { search, setSearch, sortKey, setSortKey, sortDir, setSortDir } =
+    useEntityListView("friends");
   const [newFriend, setNewFriend] = useState("");
   const [adding, setAdding] = useState(false);
   const [addOpen, setAddOpen] = useState(false);

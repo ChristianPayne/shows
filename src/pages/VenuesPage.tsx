@@ -19,6 +19,7 @@ import { MergeDialog } from "@/components/MergeDialog";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
 import { commands } from "@/lib/commands";
+import { useEntityListView } from "@/hooks/useEntityListView";
 import type {
   VenueWithCount,
   EventDetail,
@@ -32,9 +33,8 @@ let lastVenueCount = 0;
 export function VenuesListPage() {
   const navigate = useNavigate();
   const [venues, setVenues] = useState<VenueWithCount[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<EntitySortKey>("count");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const { search, setSearch, sortKey, setSortKey, sortDir, setSortDir } =
+    useEntityListView("venues");
 
   const [venueEvents, setVenueEvents] = useState<Map<number, string[]>>(new Map());
 

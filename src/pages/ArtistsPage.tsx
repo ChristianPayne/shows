@@ -23,6 +23,7 @@ import { ActionsMenu } from "@/components/ActionsMenu";
 import { ArtistTagEditor } from "@/components/ArtistTagEditor";
 import { tagChipStyle } from "@/lib/tagColor";
 import { commands } from "@/lib/commands";
+import { useEntityListView } from "@/hooks/useEntityListView";
 import type {
   ArtistWithCount,
   EventDetail,
@@ -47,9 +48,8 @@ export function ArtistsListPage() {
   // so applying a filter never shrinks the chip strip and no dedup/count
   // logic lives in TypeScript.
   const [allTags, setAllTags] = useState<TagCount[]>([]);
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<EntitySortKey>("count");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const { search, setSearch, sortKey, setSortKey, sortDir, setSortDir } =
+    useEntityListView("artists");
   const [searchParams, setSearchParams] = useSearchParams();
   const [tagsExpanded, setTagsExpanded] = useState(false);
 
