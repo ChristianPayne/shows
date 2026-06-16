@@ -123,11 +123,7 @@ async fn resolve_friend_ids(
 #[specta::specta]
 #[tauri::command]
 pub async fn get_events(pool: State<'_, SqlitePool>) -> Result<Vec<EventDetail>, String> {
-    let mut events = queries::get_all_events(&pool).await.map_err(|e| e.to_string())?;
-    if crate::util::streamer_mode_enabled(&pool).await {
-        crate::util::mask_event_friends(&mut events);
-    }
-    Ok(events)
+    queries::get_all_events(&pool).await.map_err(|e| e.to_string())
 }
 
 #[specta::specta]
@@ -143,15 +139,9 @@ pub async fn get_upcoming_events(
 #[specta::specta]
 #[tauri::command]
 pub async fn get_event(pool: State<'_, SqlitePool>, event_id: i64) -> Result<Option<EventDetail>, String> {
-    let mut event = queries::get_event_by_id(&pool, event_id)
+    queries::get_event_by_id(&pool, event_id)
         .await
-        .map_err(|e| e.to_string())?;
-    if let Some(e) = event.as_mut() {
-        if crate::util::streamer_mode_enabled(&pool).await {
-            crate::util::mask_event_friends(std::slice::from_mut(e));
-        }
-    }
-    Ok(event)
+        .map_err(|e| e.to_string())
 }
 
 #[specta::specta]

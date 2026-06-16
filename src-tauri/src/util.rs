@@ -98,16 +98,6 @@ pub async fn streamer_mode_enabled(pool: &sqlx::SqlitePool) -> bool {
     row.is_some_and(|(v,)| v == "true")
 }
 
-/// Mask the friend names embedded in a batch of events, in place. Callers guard
-/// the call behind `streamer_mode_enabled`, so this unconditionally masks.
-pub fn mask_event_friends(events: &mut [crate::db::models::EventDetail]) {
-    for event in events.iter_mut() {
-        for friend in event.friends.iter_mut() {
-            friend.name = mask_first_name(&friend.name);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

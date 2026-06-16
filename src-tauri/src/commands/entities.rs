@@ -56,15 +56,9 @@ pub async fn get_locations(pool: State<'_, SqlitePool>) -> Result<Vec<LocationWi
 #[specta::specta]
 #[tauri::command]
 pub async fn get_friends(pool: State<'_, SqlitePool>) -> Result<Vec<FriendWithCount>, String> {
-    let mut friends = queries::get_friends_with_counts(&pool)
+    queries::get_friends_with_counts(&pool)
         .await
-        .map_err(|e| e.to_string())?;
-    if crate::util::streamer_mode_enabled(&pool).await {
-        for friend in friends.iter_mut() {
-            friend.name = crate::util::mask_first_name(&friend.name);
-        }
-    }
-    Ok(friends)
+        .map_err(|e| e.to_string())
 }
 
 /// Create a standalone friend not tied to any event. Find-or-create semantics:
@@ -103,9 +97,6 @@ pub async fn get_events_for_artist(
         sort_key.unwrap_or(EventSortKey::Date),
         sort_dir.unwrap_or(SortDir::Desc),
     );
-    if crate::util::streamer_mode_enabled(&pool).await {
-        crate::util::mask_event_friends(&mut events);
-    }
     Ok(events)
 }
 
@@ -125,9 +116,6 @@ pub async fn get_events_for_venue(
         sort_key.unwrap_or(EventSortKey::Date),
         sort_dir.unwrap_or(SortDir::Desc),
     );
-    if crate::util::streamer_mode_enabled(&pool).await {
-        crate::util::mask_event_friends(&mut events);
-    }
     Ok(events)
 }
 
@@ -147,9 +135,6 @@ pub async fn get_events_for_location(
         sort_key.unwrap_or(EventSortKey::Date),
         sort_dir.unwrap_or(SortDir::Desc),
     );
-    if crate::util::streamer_mode_enabled(&pool).await {
-        crate::util::mask_event_friends(&mut events);
-    }
     Ok(events)
 }
 
@@ -169,9 +154,6 @@ pub async fn get_events_for_friend(
         sort_key.unwrap_or(EventSortKey::Date),
         sort_dir.unwrap_or(SortDir::Desc),
     );
-    if crate::util::streamer_mode_enabled(&pool).await {
-        crate::util::mask_event_friends(&mut events);
-    }
     Ok(events)
 }
 

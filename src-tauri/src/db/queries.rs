@@ -193,7 +193,7 @@ pub async fn find_or_create_friend(pool: &SqlitePool, name: &str) -> Result<i64,
 /// Fetch the friends linked to one event, ordered by name. Used to populate
 /// `EventDetail::friends` at every event-fetch site.
 pub async fn fetch_event_friends(pool: &SqlitePool, event_id: i64) -> Result<Vec<Friend>, sqlx::Error> {
-    sqlx::query_as(
+    let mut friends: Vec<Friend> = sqlx::query_as(
         "SELECT f.id, f.name FROM friends f
          JOIN event_friends ef ON f.id = ef.friend_id
          WHERE ef.event_id = ?1
@@ -201,7 +201,45 @@ pub async fn fetch_event_friends(pool: &SqlitePool, event_id: i64) -> Result<Vec
     )
     .bind(event_id)
     .fetch_all(pool)
-    .await
+    .await?;
+    mask_friend_names_if_streamer(pool, &mut friends).await;
+    Ok(friends)
+}
+
+/// Strip friend names to first-name-only when Streamer Mode is on. This is the
+/// single enforcement point for friend masking: it lives at the read path
+/// (every SELECT of a friend name funnels through here, `get_friends_with_counts`,
+/// or the top_friends stats query), so a command physically cannot surface a
+/// full name by forgetting to mask — the data leaves the DB already stripped.
+/// Generic over the row type so the three call sites share one implementation.
+async fn mask_friend_names_if_streamer<T: HasFriendName>(pool: &SqlitePool, rows: &mut [T]) {
+    if crate::util::streamer_mode_enabled(pool).await {
+        for row in rows.iter_mut() {
+            row.set_name(crate::util::mask_first_name(row.name()));
+        }
+    }
+}
+
+/// Lets [`mask_friend_names_if_streamer`] mask any row that carries a friend's
+/// name, regardless of the surrounding struct.
+trait HasFriendName {
+    fn name(&self) -> &str;
+    fn set_name(&mut self, name: String);
+}
+
+impl HasFriendName for Friend {
+    fn name(&self) -> &str { &self.name }
+    fn set_name(&mut self, name: String) { self.name = name; }
+}
+
+impl HasFriendName for FriendWithCount {
+    fn name(&self) -> &str { &self.name }
+    fn set_name(&mut self, name: String) { self.name = name; }
+}
+
+impl HasFriendName for EntityCount {
+    fn name(&self) -> &str { &self.name }
+    fn set_name(&mut self, name: String) { self.name = name; }
 }
 
 // ── Event CRUD ──
@@ -1090,7 +1128,7 @@ pub async fn get_events_for_friend(
 pub async fn get_friends_with_counts(
     pool: &SqlitePool,
 ) -> Result<Vec<FriendWithCount>, sqlx::Error> {
-    let rows: Vec<FriendWithCount> = sqlx::query_as(
+    let mut rows: Vec<FriendWithCount> = sqlx::query_as(
         "SELECT f.id, f.name, COUNT(ef.event_id) as event_count
          FROM friends f
          LEFT JOIN event_friends ef ON f.id = ef.friend_id
@@ -1100,6 +1138,7 @@ pub async fn get_friends_with_counts(
     .fetch_all(pool)
     .await?;
 
+    mask_friend_names_if_streamer(pool, &mut rows).await;
     Ok(rows)
 }
 
@@ -1402,7 +1441,7 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
     .fetch_all(pool)
     .await?;
 
-    let top_friends: Vec<EntityCount> = sqlx::query_as(
+    let mut top_friends: Vec<EntityCount> = sqlx::query_as(
         "SELECT f.id, f.name, COUNT(ef.event_id) as count
          FROM friends f
          JOIN event_friends ef ON f.id = ef.friend_id
@@ -1414,6 +1453,9 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
     )
     .fetch_all(pool)
     .await?;
+    // Only friends are masked here — top_artists/top_venues use EntityCount too
+    // but are public, so they deliberately don't go through this.
+    mask_friend_names_if_streamer(pool, &mut top_friends).await;
 
     let events_per_year: Vec<YearCount> = sqlx::query_as(
         "SELECT substr(date, 1, 4) as year, COUNT(*) as count
