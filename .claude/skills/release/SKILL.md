@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a new release of the shows Tauri app — survey commits since last tag, decide the next version, ensure README and RELEASE_NOTES.md reflect what shipped, run pre-flight checks (tsc, cargo check, clippy), bump versions across all three files, commit, tag, and push to both git remotes so CI builds and publishes the artifacts. Use this whenever the user asks to release, ship, cut a version, tag the next version, publish, or roll out a new build of the shows app — even when they don't say the word "release" (e.g. "let's get this out", "ship it", "tag the next one", "push a new version").
+description: Cut a new release of the shows Tauri app — survey commits since last tag, decide the next version, ensure README, RELEASE_NOTES.md, and the in-app CHANGELOG.md reflect what shipped, run pre-flight checks (tsc, cargo check, clippy), bump versions across all three files, commit, tag, and push to both git remotes so CI builds and publishes the artifacts. Use this whenever the user asks to release, ship, cut a version, tag the next version, publish, or roll out a new build of the shows app — even when they don't say the word "release" (e.g. "let's get this out", "ship it", "tag the next one", "push a new version").
 ---
 
 # Releasing the shows app
@@ -9,7 +9,7 @@ Cut a new release of the `shows` Tauri desktop app: survey what's changed, make 
 
 ## Why this skill exists
 
-Releases for this app touch a fragile chain of moving parts: three version files that must stay byte-identical, a Tauri auto-updater that silently breaks if signing or version drifts, two git remotes that have to stay in sync, and a `RELEASE_NOTES.md` file that the GitHub workflow reads at build time. The order of operations and the invariants below exist because each one corresponds to a real failure mode that has bitten this project (or could bite it). Following them in order keeps the machine working.
+Releases for this app touch a fragile chain of moving parts: three version files that must stay byte-identical, a Tauri auto-updater that silently breaks if signing or version drifts, two git remotes that have to stay in sync, a `RELEASE_NOTES.md` file that the GitHub workflow reads at build time, and a `CHANGELOG.md` that is **compiled into the binary** (via `include_str!`) and shown in-app. The order of operations and the invariants below exist because each one corresponds to a real failure mode that has bitten this project (or could bite it). Following them in order keeps the machine working.
 
 ## Before you start
 
@@ -24,7 +24,7 @@ Sanity-check the environment. If any of these aren't true, stop and tell the use
 This skill is destructive — it commits, tags, and pushes to public remotes. Move through the phases below, but **pause at three explicit checkpoints** for human approval:
 
 - **Checkpoint A** — after Phase 1, to confirm the version-bump decision
-- **Checkpoint B** — after Phase 2 and Phase 3, to review the README edits and the drafted `RELEASE_NOTES.md`
+- **Checkpoint B** — after Phase 2 and Phase 3, to review the README edits, the drafted `RELEASE_NOTES.md`, and the new `CHANGELOG.md` entry
 - **Checkpoint C** — right before Phase 6, to confirm "ready to commit + tag + push"
 
 At each checkpoint, summarize concisely what's about to happen and wait for an explicit go-ahead. Don't paraphrase confirmation as "looks good, proceeding" — wait for the user.
@@ -79,7 +79,11 @@ List the discrepancies you find and propose specific edits with the Edit tool. D
 
 Apply the edits *before* the checkpoint so the user can review them in place.
 
-## Phase 3: Generate RELEASE_NOTES.md
+## Phase 3: Release notes — RELEASE_NOTES.md and CHANGELOG.md
+
+Two files share the same notes. Write the notes once, then put them in both: overwrite `RELEASE_NOTES.md` (the GitHub release body) and **prepend** the same content to `CHANGELOG.md` (the in-app history).
+
+### RELEASE_NOTES.md
 
 `RELEASE_NOTES.md` lives at the repo root. The release workflow reads it and passes its contents as the GitHub release body, so whatever you write here is what users see on the Releases page.
 
@@ -126,6 +130,24 @@ The repo doesn't use conventional commits, so classify by reading the diff, not 
 | Dependency bumps, CI changes, refactors, type-only changes | Internal (or omit) |
 
 Write the file with the Write tool. Show it to the user **as part of Checkpoint B** along with the README diffs.
+
+### CHANGELOG.md
+
+`CHANGELOG.md` (repo root) is the **in-app** changelog: it's compiled into the binary via `include_str!` in `src-tauri/src/commands/changelog.rs` and shown when the user clicks the version in the status bar. Unlike `RELEASE_NOTES.md`, it is **never overwritten** — it accumulates every version, newest first.
+
+Add the new version by **prepending** a section directly under the `# Changelog` intro paragraph, above the most recent `## vX.Y.Z` entry. Reuse the exact bullets you just wrote for `RELEASE_NOTES.md`; only the heading levels and a date differ:
+
+- Version heading is `## vX.Y.Z — YYYY-MM-DD` (h2, stamped with today's date), not `# vX.Y.Z`.
+- Section headings are `### Features` / `### Improvements` / `### Fixes` / `### Internal` / `### Notes` (h3), not h2.
+- The bullets themselves are identical.
+
+So: take the RELEASE_NOTES.md body, demote every heading one level, stamp the version heading with today's date, and prepend the block. Get today's date with:
+
+```bash
+date +%Y-%m-%d
+```
+
+The Rust parser keys on `## ` for versions and `### ` for sections and pulls the date from the trailing `YYYY-MM-DD` token, so matching this format exactly is what makes the entry render in-app. Because the file is compiled into the app, the updated `CHANGELOG.md` **must** ride in the `Release vX.Y.Z` commit (Phase 7) — `git add -A` covers it, but if it's omitted the in-app changelog silently stops at the previous version. Show the prepended entry to the user at **Checkpoint B** alongside `RELEASE_NOTES.md`.
 
 ## Phase 4: Pre-flight checks
 
@@ -176,7 +198,7 @@ All three should print the same `X.Y.Z`. If they don't, fix it now.
 
 ## Phase 7: Commit, tag, push
 
-**Checkpoint C goes here.** Show the user what will be committed (`git status` and a brief recap of the version + the staged files: README edits, `RELEASE_NOTES.md`, the three version files, `Cargo.lock`). Wait for go-ahead.
+**Checkpoint C goes here.** Show the user what will be committed (`git status` and a brief recap of the version + the staged files: README edits, `RELEASE_NOTES.md`, `CHANGELOG.md`, the three version files, `Cargo.lock`). Wait for go-ahead.
 
 Then:
 
@@ -210,6 +232,7 @@ Then you're done. Don't try to publish, edit, or babysit the release any further
 
 - **Forward-only versions.** Never reuse a version, never publish a lower version after a higher one. The updater compares versions lexicographically and gets confused by out-of-order releases.
 - **Both remotes, always.** The mirrors only have value if they stay in sync.
+- **CHANGELOG.md is prepend-only and ships in the commit.** Never overwrite it (that's `RELEASE_NOTES.md`'s job) and never tag without the new entry committed — it's compiled into the binary, so a missing entry means the in-app changelog silently stalls at the prior version.
 - **Three version files in lockstep, byte-identical.** This is the single most common way to break the auto-updater.
 - **Never `--no-verify` and never `-D warnings` overrides.** If a check fails, it's signal — fix the root cause, don't silence it.
 - **Never rotate the Tauri signing key as part of a release.** Key rotation requires a careful multi-release handoff (ship a release with the old key that *contains* the new pubkey first, then rotate). If the user asks to rotate, treat it as a separate task and warn them.
@@ -231,6 +254,8 @@ Then you're done. Don't try to publish, edit, or babysit the release any further
 |---|---|
 | CI workflow | `.github/workflows/release.yml` |
 | Release notes (read by workflow) | `RELEASE_NOTES.md` (repo root) |
+| In-app changelog (compiled into the binary) | `CHANGELOG.md` (repo root) |
+| Changelog parser + command | `src-tauri/src/commands/changelog.rs` |
 | Updater Rust module | `src-tauri/src/updater.rs` |
 | Updater config | `src-tauri/tauri.conf.json` → `plugins.updater` |
 | Frontend updater banner | `src/components/UpdateBanner.tsx` |

@@ -683,6 +683,9 @@ async getDbVersion() : Promise<Result<number, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getChangelog() : Promise<ChangelogEntry[]> {
+    return await TAURI_INVOKE("get_changelog");
+},
 async getSetting(key: string) : Promise<Result<string | null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_setting", { key }) };
@@ -776,6 +779,20 @@ export type ArtistsQueryInput = { query?: string | null;
  * we lowercase them here for the comparison.
  */
 tags?: string[] | null; sortKey?: EntitySortKey | null; sortDir?: SortDir | null; limit?: number | null }
+export type ChangelogEntry = { 
+/**
+ * e.g. "v1.1.1".
+ */
+version: string; 
+/**
+ * ISO date from the heading, when present.
+ */
+date: string | null; sections: ChangelogSection[] }
+export type ChangelogSection = { 
+/**
+ * "Features", "Fixes", … — empty for bullets that precede any `###` head.
+ */
+title: string; items: string[] }
 export type CreateEventInput = { name: string; date: string; end_date: string | null; notes: string | null; venue: string; city: string; state: string; artists: ArtistEntry[]; 
 /**
  * Friends who attended. Existing friends carry their `id` and link by it;

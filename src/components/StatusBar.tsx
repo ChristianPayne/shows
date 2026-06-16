@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { commands } from "@/lib/commands";
+import { ChangelogDialog } from "@/components/ChangelogDialog";
 
 interface GenreProgress {
   current: number;
@@ -25,6 +26,7 @@ export function StatusBar() {
   const [setlistSongCount, setSetlistSongCount] = useState(0);
   const [version, setVersion] = useState("");
   const [dbVersion, setDbVersion] = useState<number | null>(null);
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   useEffect(() => {
     getVersion().then(setVersion);
@@ -105,13 +107,23 @@ export function StatusBar() {
         )}
       </div>
       {version && (
-        <span className="shrink-0 tabular-nums">
+        <button
+          type="button"
+          onClick={() => setChangelogOpen(true)}
+          className="shrink-0 cursor-pointer tabular-nums transition-colors hover:text-foreground"
+          title="View changelog"
+        >
           v{version}
           {dbVersion !== null && (
             <span className="text-muted-foreground/60"> · db v{dbVersion}</span>
           )}
-        </span>
+        </button>
       )}
+      <ChangelogDialog
+        open={changelogOpen}
+        onOpenChange={setChangelogOpen}
+        currentVersion={version}
+      />
     </div>
   );
 }

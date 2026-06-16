@@ -1,3 +1,4 @@
+pub mod changelog;
 pub mod events;
 pub mod query;
 pub mod import;
