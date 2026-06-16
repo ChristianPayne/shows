@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.png" alt="Shows" width="80" height="80" />
+</p>
+
 # Shows
 
 Personal desktop app for tracking live music attendance. Import history from CSV, browse and filter events, manage artists/friends/venues/locations, view stats, and log new shows.
@@ -14,7 +18,7 @@ Personal desktop app for tracking live music attendance. Import history from CSV
 
 - **Dashboard** with show totals, top artists/venues, most-seen-with friends, top genres radar, and shows per year/month
 - **Events** — full CRUD, multi-day support (start/end dates), cancelled event tracking, free-form notes, friend tagging, drag-and-drop artist reordering, and a `Cmd/Ctrl+N` shortcut to start a new event from anywhere. Editing an event auto-saves as you change it (creating one uses an explicit, validated form). The list adds a faceted filter — by friends, artists, event name, venue, and location, with any/all (OR/AND) matching per facet — on top of free-text search, plus show/hide columns, and it remembers your search, sort, and filters when you leave the page and come back
-- **Media attachments** — attach photos and videos (jpg/jpeg/png/webp/gif/mp4/webm/mov) to events via file picker or drag-and-drop. Galleries render inline on event pages and surface transitively on artist/friend/venue/location detail pages through the events they belong to. Sort by capture time (EXIF `DateTimeOriginal` for photos, QuickTime metadata or `mvhd` creation time for videos) or upload time, with a fullscreen viewer that handles both image and video playback.
+- **Media attachments** — attach photos and videos (jpg/jpeg/png/webp/gif/mp4/webm/mov) to events via file picker or drag-and-drop. Galleries render inline on event pages and surface transitively on artist/friend/venue/location detail pages through the events they belong to. Sort by capture time (EXIF `DateTimeOriginal` for photos, QuickTime metadata or `mvhd` creation time for videos) or upload time, with a fullscreen viewer that handles both image and video playback — images scroll/pinch to zoom and drag to pan.
 - **Media tab** — top-level gallery of every photo and video across all events, grouped by event with clickable section headers that jump to the event. Filter by All / Photos / Videos.
 - **Artists** — rename, merge duplicates, b2b set grouping, and per-artist profile pages. Tags are user-curated: type your own or pick from MusicBrainz suggestions (already-known suggestions are flagged and float to the front), with genre-colored chips and a "similar artists" list driven by shared tags. Filter the artist list by tag chips with deep-linkable URLs (`?tag=`). A seeded list of common genres backs the suggestions and is editable in **Settings → Data**.
 - **Friends** — tag who you attended each show with; per-friend pages list the shows you saw together. Add friends as chips on the event form or create them standalone from the Friends page; rename, and delete when they have no events
@@ -27,6 +31,7 @@ Personal desktop app for tracking live music attendance. Import history from CSV
 - **Accent colors** — 8 presets plus custom colors you add yourself, persisted
 - **Streamer Mode** — a persisted **Settings** toggle that masks friends' names to first-name-only so sharing your screen on stream doesn't reveal who you go to shows with. Only friends are masked; artists, venues, events, and locations stay intact. Names are masked before they ever reach the screen, and adding friends to events keeps working as normal (friend renaming is disabled while it's on)
 - **Autocomplete** — venue, city, state, artist, and friend fields suggest existing entities
+- **Changelog** — click the version in the status bar to read what changed in each release; the history is bundled with the app, no network needed
 - **Auto-updater** — built-in update checking with one-click install from either the in-app banner or **Settings → Updates**, with inline download progress and error reporting
 
 ## External integrations
