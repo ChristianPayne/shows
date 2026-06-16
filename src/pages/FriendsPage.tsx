@@ -30,6 +30,7 @@ import { ArrowUpDown, MoreHorizontal, UserPlus } from "lucide-react";
 import { SkeletonTableRow } from "@/components/Skeleton";
 import { EditableName } from "@/components/EditableName";
 import { ActionsMenu } from "@/components/ActionsMenu";
+import { useStreamerMode } from "@/lib/streamerMode";
 import { commands } from "@/lib/commands";
 import type {
   FriendWithCount,
@@ -233,6 +234,10 @@ export function FriendDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const friendId = Number(id);
+  // Names arrive masked from the backend while streamer mode is on, so the
+  // rename editor would seed from a first-name-only value — disable it rather
+  // than let a save overwrite the real name.
+  const streamerMode = useStreamerMode();
 
   const [friends, setFriends] = useState<FriendWithCount[]>([]);
   const [events, setEvents] = useState<EventDetail[]>([]);
@@ -281,7 +286,7 @@ export function FriendDetailPage() {
           </p>
         </div>
         <ActionsMenu
-          onEdit={() => setEditing(true)}
+          onEdit={streamerMode ? undefined : () => setEditing(true)}
           onDelete={friend.event_count === 0 ? async () => {
             await commands.deleteFriend(friend.id);
             navigate("/friends");

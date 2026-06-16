@@ -67,6 +67,47 @@ pub fn event_folder_path(app_data_dir: &Path, id: i64, name: &str) -> PathBuf {
     media_root(app_data_dir).join(event_folder_name(id, name))
 }
 
+// ── Streamer Mode ───────────────────────────────────────────────────────────
+
+/// Collapse a friend's name to its first word.
+///
+/// Streamer Mode trades full names for first-name-only so a shared screen
+/// doesn't out the people you go to shows with. This is the single source of
+/// truth for that transform — every command that emits a friend name funnels
+/// through it. We keep the leading whitespace-delimited token and nothing else;
+/// deliberately blunt, because anything cleverer risks leaking more than the
+/// first name. An empty or all-whitespace name yields "" — there was nothing
+/// safe to show anyway.
+pub fn mask_first_name(name: &str) -> String {
+    name.split_whitespace().next().unwrap_or("").to_string()
+}
+
+/// Whether Streamer Mode is currently on, read from the `settings` table.
+///
+/// A missing row (fresh install) or any value other than `"true"` reads as off.
+/// The read shares the request's pool, so if it failed the surrounding data
+/// query would have failed too — we default to off rather than thread an error
+/// through every display command.
+pub async fn streamer_mode_enabled(pool: &sqlx::SqlitePool) -> bool {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM settings WHERE key = 'streamer_mode'")
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+    row.is_some_and(|(v,)| v == "true")
+}
+
+/// Mask the friend names embedded in a batch of events, in place. Callers guard
+/// the call behind `streamer_mode_enabled`, so this unconditionally masks.
+pub fn mask_event_friends(events: &mut [crate::db::models::EventDetail]) {
+    for event in events.iter_mut() {
+        for friend in event.friends.iter_mut() {
+            friend.name = mask_first_name(&friend.name);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,5 +140,14 @@ mod tests {
     #[test]
     fn folder_name_includes_id() {
         assert_eq!(event_folder_name(42, "Test Show"), "test-show-42");
+    }
+
+    #[test]
+    fn mask_first_name_keeps_leading_token() {
+        assert_eq!(mask_first_name("Sarah Chen"), "Sarah");
+        assert_eq!(mask_first_name("Madonna"), "Madonna");
+        assert_eq!(mask_first_name("  Mary  Jane  Watson "), "Mary");
+        assert_eq!(mask_first_name(""), "");
+        assert_eq!(mask_first_name("   "), "");
     }
 }

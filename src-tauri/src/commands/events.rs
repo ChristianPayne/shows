@@ -72,29 +72,47 @@ pub struct CreateEventInput {
     pub city: String,
     pub state: String,
     pub artists: Vec<ArtistEntry>,
-    /// Names of friends who attended. Resolved to ids (find-or-create) on the
-    /// way in, mirroring how artist names are handled. No set_group — friends
-    /// have no b2b concept.
-    pub friends: Vec<String>,
+    /// Friends who attended. Existing friends carry their `id` and link by it;
+    /// newly typed friends have `id: None` and are resolved by name
+    /// (find-or-create) on the way in. No set_group — friends have no b2b
+    /// concept. See [`FriendEntry`] for why the id matters under Streamer Mode.
+    pub friends: Vec<FriendEntry>,
 }
 
-/// Resolve a list of friend names to deduplicated friend ids, creating any
-/// that don't exist yet. Blank names are skipped; case-insensitive duplicates
-/// collapse to one id so the `event_friends` (event_id, friend_id) primary key
-/// can't be violated by "Mike" + "mike" on the same event.
+#[derive(serde::Deserialize, serde::Serialize, specta::Type, Clone)]
+pub struct FriendEntry {
+    /// Id of an existing friend when this chip came from a known friend. The
+    /// save links by this id and *ignores* `name`, which is what lets Streamer
+    /// Mode hand back first-name-only display names without a masked "Sarah"
+    /// being resolved to a brand-new duplicate friend. `None` means a freshly
+    /// typed name, resolved via find-or-create.
+    pub id: Option<i64>,
+    pub name: String,
+}
+
+/// Resolve form friend entries to deduplicated friend ids. Entries with an id
+/// link straight by it; id-less entries are new names resolved via
+/// find-or-create. Blank new names are skipped; duplicate ids collapse to one
+/// so the `event_friends` (event_id, friend_id) primary key can't be violated
+/// by the same friend appearing twice.
 async fn resolve_friend_ids(
     pool: &SqlitePool,
-    names: &[String],
+    entries: &[FriendEntry],
 ) -> Result<Vec<i64>, String> {
     let mut ids = Vec::new();
-    for name in names {
-        let trimmed = name.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let id = queries::find_or_create_friend(pool, trimmed)
-            .await
-            .map_err(|e| e.to_string())?;
+    for entry in entries {
+        let id = match entry.id {
+            Some(id) => id,
+            None => {
+                let trimmed = entry.name.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                queries::find_or_create_friend(pool, trimmed)
+                    .await
+                    .map_err(|e| e.to_string())?
+            }
+        };
         if !ids.contains(&id) {
             ids.push(id);
         }
@@ -105,7 +123,11 @@ async fn resolve_friend_ids(
 #[specta::specta]
 #[tauri::command]
 pub async fn get_events(pool: State<'_, SqlitePool>) -> Result<Vec<EventDetail>, String> {
-    queries::get_all_events(&pool).await.map_err(|e| e.to_string())
+    let mut events = queries::get_all_events(&pool).await.map_err(|e| e.to_string())?;
+    if crate::util::streamer_mode_enabled(&pool).await {
+        crate::util::mask_event_friends(&mut events);
+    }
+    Ok(events)
 }
 
 #[specta::specta]
@@ -121,9 +143,15 @@ pub async fn get_upcoming_events(
 #[specta::specta]
 #[tauri::command]
 pub async fn get_event(pool: State<'_, SqlitePool>, event_id: i64) -> Result<Option<EventDetail>, String> {
-    queries::get_event_by_id(&pool, event_id)
+    let mut event = queries::get_event_by_id(&pool, event_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    if let Some(e) = event.as_mut() {
+        if crate::util::streamer_mode_enabled(&pool).await {
+            crate::util::mask_event_friends(std::slice::from_mut(e));
+        }
+    }
+    Ok(event)
 }
 
 #[specta::specta]

@@ -480,6 +480,15 @@ pub async fn query_friends(
     if let Some(limit) = input.limit {
         friends.truncate(limit);
     }
+
+    // Mask last, after filter/sort/truncate, so search still matches on the
+    // real name — you type the masked first name and it matches the full name
+    // server-side, then we hand back only the first name to render.
+    if crate::util::streamer_mode_enabled(&pool).await {
+        for friend in friends.iter_mut() {
+            friend.name = crate::util::mask_first_name(&friend.name);
+        }
+    }
     Ok(friends)
 }
 

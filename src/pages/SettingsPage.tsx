@@ -40,6 +40,8 @@ interface SettingsPageProps {
   onRemoveCustomAccent: (id: string) => void;
   dark: boolean;
   onToggleDark: () => void;
+  streamerMode: boolean;
+  onToggleStreamerMode: () => void;
 }
 
 export function SettingsPage({
@@ -50,9 +52,14 @@ export function SettingsPage({
   onRemoveCustomAccent,
   dark,
   onToggleDark,
+  streamerMode,
+  onToggleStreamerMode,
 }: SettingsPageProps) {
   const [fetchingGenres, setFetchingGenres] = useState(false);
   const [addAccentOpen, setAddAccentOpen] = useState(false);
+  // Turning streamer mode OFF reveals full names — gate it behind a confirm so
+  // a stray click can't un-mask mid-stream. Turning it ON needs no confirm.
+  const [confirmStreamerOff, setConfirmStreamerOff] = useState(false);
   const [pendingColor, setPendingColor] = useState("#3b82f6");
   const updater = useUpdater();
   const [setlistfmKey, setSetlistfmKey] = useState("");
@@ -305,6 +312,62 @@ export function SettingsPage({
             </div>
           </DialogContent>
         </Dialog>
+      </div>
+
+      <Separator />
+
+      {/* Streamer Mode */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Streamer Mode</h2>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground max-w-md">
+            Mask friends' names down to their first name only — handy when you're
+            sharing your screen on stream and don't want to reveal who you go to
+            shows with.
+          </p>
+          {/* Always Twitch purple (#9146FF) regardless of the chosen accent —
+              the toggle reads as "stream mode" at a glance, not as app chrome. */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={streamerMode}
+            aria-label="Toggle streamer mode"
+            onClick={() => {
+              // Off → on is safe and immediate; on → off reveals names, so
+              // route it through the confirm dialog instead of toggling here.
+              if (streamerMode) setConfirmStreamerOff(true);
+              else onToggleStreamerMode();
+            }}
+            style={streamerMode ? { backgroundColor: "#9146FF" } : undefined}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+              streamerMode ? "" : "bg-input"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                streamerMode ? "translate-x-5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+
+        <AlertDialog open={confirmStreamerOff} onOpenChange={setConfirmStreamerOff}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Turn off Streamer Mode?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your friends' full names will be visible again. Make sure you're
+                not sharing your screen before continuing.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={onToggleStreamerMode}>
+                Turn Off
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       <Separator />

@@ -25,6 +25,7 @@ Personal desktop app for tracking live music attendance. Import history from CSV
 - **Backup/restore** — full backup bundles the database and all media into a single zip via native file dialogs, written atomically so an interrupted export never leaves a half-written file at the destination. Restore swaps both the database and the media tree with rollback on failure, and still accepts pre-v0.3 `.db`-only backups. Restore refuses backups created by a newer version of the app, so a backup from a future install won't silently corrupt an older one.
 - **Dark mode** — system default with manual toggle, persisted
 - **Accent colors** — 8 presets plus custom colors you add yourself, persisted
+- **Streamer Mode** — a persisted **Settings** toggle that masks friends' names to first-name-only so sharing your screen on stream doesn't reveal who you go to shows with. Only friends are masked; artists, venues, events, and locations stay intact. Names are masked before they ever reach the screen, and adding friends to events keeps working as normal (friend renaming is disabled while it's on)
 - **Autocomplete** — venue, city, state, artist, and friend fields suggest existing entities
 - **Auto-updater** — built-in update checking with one-click install from either the in-app banner or **Settings → Updates**, with inline download progress and error reporting
 

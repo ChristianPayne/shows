@@ -14,6 +14,7 @@ import { MediaPage } from "@/pages/MediaPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { cn } from "@/lib/utils";
 import { applyAccent, ACCENT_PRESETS, type AccentPreset } from "@/lib/accent";
+import { StreamerModeProvider } from "@/lib/streamerMode";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
 import {
@@ -70,6 +71,7 @@ function AppLayout() {
   );
   const [accentId, setAccentId] = useState("neutral");
   const [customAccents, setCustomAccents] = useState<AccentPreset[]>([]);
+  const [streamerMode, setStreamerMode] = useState(false);
   // Built-in presets + the user's saved custom colors, in one list so both the
   // picker and applyAccent's lookup see every option.
   const accents = [...ACCENT_PRESETS, ...customAccents];
@@ -80,7 +82,8 @@ function AppLayout() {
       commands.getSetting("theme"),
       commands.getSetting("accent"),
       commands.getSetting("custom_accents"),
-    ]).then(([themeValue, accentValue, customJson]) => {
+      commands.getSetting("streamer_mode"),
+    ]).then(([themeValue, accentValue, customJson, streamerValue]) => {
       let isDark = document.documentElement.classList.contains("dark");
       if (themeValue === "dark" || themeValue === "light") {
         isDark = themeValue === "dark";
@@ -99,8 +102,15 @@ function AppLayout() {
       const accent = accentValue ?? "neutral";
       setAccentId(accent);
       applyAccent(accent, isDark, [...ACCENT_PRESETS, ...customs]);
+      setStreamerMode(streamerValue === "true");
     });
   }, []);
+
+  const toggleStreamerMode = () => {
+    const next = !streamerMode;
+    setStreamerMode(next);
+    commands.setSetting("streamer_mode", next ? "true" : "false");
+  };
 
   const toggleDark = () => {
     const next = !dark;
@@ -142,6 +152,7 @@ function AppLayout() {
   };
 
   return (
+    <StreamerModeProvider value={streamerMode}>
     <div className="flex flex-col h-screen">
     <UpdateBanner />
     <div className="flex flex-1 min-h-0">
@@ -226,6 +237,8 @@ function AppLayout() {
               onRemoveCustomAccent={removeCustomAccent}
               dark={dark}
               onToggleDark={toggleDark}
+              streamerMode={streamerMode}
+              onToggleStreamerMode={toggleStreamerMode}
             />
           } />
           <Route path="/" element={<StatsPage />} />
@@ -236,6 +249,7 @@ function AppLayout() {
     <StatusBar />
     <CommandPalette />
     </div>
+    </StreamerModeProvider>
   );
 }
 

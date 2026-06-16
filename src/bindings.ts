@@ -769,11 +769,12 @@ export type ArtistsQueryInput = { query?: string | null;
 tags?: string[] | null; sortKey?: EntitySortKey | null; sortDir?: SortDir | null; limit?: number | null }
 export type CreateEventInput = { name: string; date: string; end_date: string | null; notes: string | null; venue: string; city: string; state: string; artists: ArtistEntry[]; 
 /**
- * Names of friends who attended. Resolved to ids (find-or-create) on the
- * way in, mirroring how artist names are handled. No set_group — friends
- * have no b2b concept.
+ * Friends who attended. Existing friends carry their `id` and link by it;
+ * newly typed friends have `id: None` and are resolved by name
+ * (find-or-create) on the way in. No set_group — friends have no b2b
+ * concept. See [`FriendEntry`] for why the id matters under Streamer Mode.
  */
-friends: string[] }
+friends: FriendEntry[] }
 /**
  * Adjacently-tagged so the frontend can discriminate on `event` and get a
  * typed `data` payload. Kept in sync with the `useUpdater` hook's switch on
@@ -830,6 +831,15 @@ filter?: EventFilter | null; sortKey?: EventSortKey | null; sortDir?: SortDir | 
  * `EventDetail` so the event form can prefill the chips synchronously.
  */
 export type Friend = { id: number; name: string }
+export type FriendEntry = { 
+/**
+ * Id of an existing friend when this chip came from a known friend. The
+ * save links by this id and *ignores* `name`, which is what lets Streamer
+ * Mode hand back first-name-only display names without a masked "Sarah"
+ * being resolved to a brand-new duplicate friend. `None` means a freshly
+ * typed name, resolved via find-or-create.
+ */
+id: number | null; name: string }
 export type FriendWithCount = { id: number; name: string; event_count: number }
 export type FriendsQueryInput = { query?: string | null; sortKey?: EntitySortKey | null; sortDir?: SortDir | null; limit?: number | null }
 /**
