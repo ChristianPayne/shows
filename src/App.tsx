@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { applyAccent, ACCENT_PRESETS, type AccentPreset } from "@/lib/accent";
 import { settings } from "@/lib/settings";
 import { StreamerModeProvider } from "@/lib/streamerMode";
+import { Logo } from "@/components/Logo";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
 import {
@@ -151,7 +152,10 @@ function AppLayout() {
     <div className="flex flex-1 min-h-0">
       <nav className="w-48 border-r bg-sidebar-background p-4 flex flex-col">
         <div className="flex items-center justify-between px-2 mb-4">
-          <h1 className="text-lg font-bold">Shows</h1>
+          <h1 className="flex items-center gap-1.5 text-lg font-bold">
+            <Logo className="h-5 w-5 text-primary" />
+            Shows
+          </h1>
           <NavLink
             to="/events/new"
             className="rounded-md p-1 text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
