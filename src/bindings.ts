@@ -920,10 +920,9 @@ export type Stats = { total_events: number; total_artists: number; total_venues:
  */
 top_friends: EntityCount[]; events_per_year: YearCount[]; events_per_month: MonthCount[]; 
 /**
- * Aggregated from `artists.tags` (MusicBrainz tag lists), counted by
- * distinct attended events per tag. Can be empty when no artists have
- * had their metadata fetched yet — the UI surfaces a hint pointing at
- * the Settings "Fetch all" action in that case.
+ * Aggregated from each artist's curated tags, counted by distinct attended
+ * events per tag. Empty until some artists have tags — the UI then hints at
+ * adding tags on the artist pages.
  */
 top_genres: GenreCount[] }
 export type TAURI_CHANNEL<TSend> = null

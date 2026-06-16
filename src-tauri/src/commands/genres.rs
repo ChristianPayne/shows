@@ -30,7 +30,7 @@ pub async fn fetch_genres(
     pool: State<'_, SqlitePool>,
     app_handle: tauri::AppHandle,
 ) -> Result<usize, String> {
-    // Settings "Fetch all" button — no filter, scan the whole DB.
+    // Settings "Fetch Artist Info" button — no filter, scan the whole DB.
     fetch_genres_bg(pool.inner(), &app_handle, None).await
 }
 

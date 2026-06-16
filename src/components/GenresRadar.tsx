@@ -33,11 +33,12 @@ export function GenresRadar({ genres }: GenresRadarProps) {
       <div className="rounded-lg border border-dashed p-8 text-center">
         <h3 className="mb-1 text-sm font-medium">No genre data yet</h3>
         <p className="text-xs text-muted-foreground">
-          Click{" "}
-          <Link to="/settings" className="underline">
-            Fetch all
+          Add tags to your{" "}
+          <Link to="/artists" className="underline">
+            artists
           </Link>{" "}
-          in Settings to pull genre tags for your artists from MusicBrainz.
+          to chart your taste — open an artist and type your own, or pick from
+          MusicBrainz suggestions.
         </p>
       </div>
     );

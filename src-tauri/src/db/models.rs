@@ -190,10 +190,9 @@ pub struct Stats {
     pub top_friends: Vec<EntityCount>,
     pub events_per_year: Vec<YearCount>,
     pub events_per_month: Vec<MonthCount>,
-    /// Aggregated from `artists.tags` (MusicBrainz tag lists), counted by
-    /// distinct attended events per tag. Can be empty when no artists have
-    /// had their metadata fetched yet — the UI surfaces a hint pointing at
-    /// the Settings "Fetch all" action in that case.
+    /// Aggregated from each artist's curated tags, counted by distinct attended
+    /// events per tag. Empty until some artists have tags — the UI then hints at
+    /// adding tags on the artist pages.
     pub top_genres: Vec<GenreCount>,
 }
 
