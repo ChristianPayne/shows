@@ -36,6 +36,9 @@ export function Autocomplete({
   // commits the obvious choice without ever touching the arrow keys.
   const [highlightIndex, setHighlightIndex] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // One ref per rendered row so we can scroll the highlighted item back into
+  // view when arrow keys move the selection past the menu's max-height.
+  const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
 
   // Combobox behaviour: an empty (but focused) field shows the full list;
   // typing filters it down. The dropdown still only renders while `open`.
@@ -43,16 +46,29 @@ export function Autocomplete({
     ? suggestions.filter((s) => s.toLowerCase().includes(value.toLowerCase()))
     : suggestions;
 
-  // Hide the dropdown once the input already exactly matches the top match —
-  // there's nothing left to disambiguate.
+  // For single-value fields, hide the dropdown once the input already exactly
+  // matches the top match — there's nothing left to disambiguate, and a refocus
+  // shouldn't pop a redundant one-item menu. Multi-add (chip) fields keep the
+  // menu open on an exact match so you can see — and click — that you're adding
+  // an existing entry rather than creating a brand-new one.
+  const exactTopMatch = filtered[0]?.toLowerCase() === value.toLowerCase();
   const showDropdown =
-    open && filtered.length > 0 && filtered[0]?.toLowerCase() !== value.toLowerCase();
+    open && filtered.length > 0 && (!!onCommit || !exactTopMatch);
 
   // Reset the highlight to the first row on every keystroke; arrow keys move
   // it within the current result set.
   useEffect(() => {
     setHighlightIndex(0);
   }, [value]);
+
+  // Keep the highlighted row visible as it moves. `block: "nearest"` scrolls
+  // the menu the minimum amount — and only when the row is actually off-screen
+  // — so a selection already in view doesn't jump.
+  useEffect(() => {
+    if (showDropdown) {
+      itemRefs.current[highlightIndex]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlightIndex, showDropdown]);
 
   // Close on outside click
   useEffect(() => {
@@ -98,8 +114,9 @@ export function Autocomplete({
         return;
       }
     } else if (onCommit && e.key === "Enter") {
-      // Multi-add field with no open dropdown (e.g. an exact-match name was
-      // typed): Enter still adds the typed text rather than submitting a form.
+      // Multi-add field with no open dropdown — i.e. the typed text matches no
+      // suggestion (a brand-new name). Enter adds that text as a new entry
+      // rather than submitting the surrounding form.
       e.preventDefault();
       commit(value);
     }
@@ -123,6 +140,7 @@ export function Autocomplete({
           {filtered.map((item, i) => (
             <li
               key={item}
+              ref={(el) => { itemRefs.current[i] = el; }}
               className={cn(
                 "cursor-pointer rounded-sm px-2 py-1.5 text-sm",
                 i === highlightIndex
