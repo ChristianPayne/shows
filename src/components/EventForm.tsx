@@ -29,6 +29,9 @@ import { commands } from "@/lib/commands";
 import type { EventDetail, CreateEventInput, FriendEntry, VenueLocation } from "@/bindings";
 
 interface FormArtist {
+  // Mirrors FriendEntry: existing artists carry their id so the save links by
+  // it, not by the (display) name. Freshly typed artists have id: null.
+  id: number | null;
   name: string;
   setGroup: number | null;
 }
@@ -51,7 +54,7 @@ function useEventForm(initialData?: EventDetail) {
   const [notes, setNotes] = useState(initialData?.notes ?? "");
   const [artists, setArtists] = useState<FormArtist[]>(
     initialData?.artist_sets.flatMap((s) =>
-      s.artists.map((a) => ({ name: a.name, setGroup: a.set_group }))
+      s.artists.map((a) => ({ id: a.id, name: a.name, setGroup: a.set_group }))
     ) ?? []
   );
   const [artistInput, setArtistInput] = useState("");
@@ -68,7 +71,9 @@ function useEventForm(initialData?: EventDetail) {
   const [venueNames, setVenueNames] = useState<string[]>([]);
   const [cityNames, setCityNames] = useState<string[]>([]);
   const [stateNames, setStateNames] = useState<string[]>([]);
-  const [artistNames, setArtistNames] = useState<string[]>([]);
+  // Full artist records (id + name) so a picked suggestion carries its id into
+  // the chip; the suggestion list still shows names.
+  const [artistList, setArtistList] = useState<{ id: number; name: string }[]>([]);
   // Full friend records (id + name) so a picked suggestion can carry its id
   // into the chip — the suggestion list shows names, but selection resolves
   // back to the real friend here.
@@ -91,14 +96,16 @@ function useEventForm(initialData?: EventDetail) {
       setCityNames([...new Set(l.map((x) => x.city))]);
       setStateNames([...new Set(l.map((x) => x.state))]);
     });
-    commands.getArtists().then((a) => setArtistNames(a.map((x) => x.name)));
+    commands.getArtists().then((a) => setArtistList(a.map((x) => ({ id: x.id, name: x.name }))));
     commands.getFriends().then((f) => setFriendList(f.map((x) => ({ id: x.id, name: x.name }))));
   }, []);
 
   const availableArtists = useMemo(() => {
     const taken = new Set(artists.map((fa) => fa.name.toLowerCase()));
-    return artistNames.filter((a) => !taken.has(a.toLowerCase()));
-  }, [artistNames, artists]);
+    return artistList
+      .filter((a) => !taken.has(a.name.toLowerCase()))
+      .map((a) => a.name);
+  }, [artistList, artists]);
 
   const availableFriends = useMemo(() => {
     const taken = new Set(friends.map((f) => f.name.toLowerCase()));
@@ -127,11 +134,16 @@ function useEventForm(initialData?: EventDetail) {
       setArtistInput("");
       return;
     }
-    // Snap to the canonical casing if this artist already exists in the DB —
-    // prevents visual drift between what the user typed and what Rust will
-    // dedupe to on save.
-    const canonical = artistNames.find((a) => a.toLowerCase() === lowered) ?? trimmed;
-    setArtists([...artists, { name: canonical, setGroup: null }]);
+    // If the committed value matches a known artist, carry its id so the save
+    // links by id (and its canonical casing comes along for free). Otherwise
+    // it's a new artist, created from the typed name on save.
+    const existing = artistList.find((a) => a.name.toLowerCase() === lowered);
+    setArtists([
+      ...artists,
+      existing
+        ? { id: existing.id, name: existing.name, setGroup: null }
+        : { id: null, name: trimmed, setGroup: null },
+    ]);
     setArtistInput("");
   };
 
@@ -176,11 +188,12 @@ function useEventForm(initialData?: EventDetail) {
     setArtists(updated);
   };
 
-  // Delegate b2b toggle logic to Rust
+  // Delegate b2b toggle logic to Rust. The id rides along untouched — toggle_b2b
+  // only reshuffles set_group — so existing artists keep linking by id on save.
   const toggleB2b = async (index: number) => {
-    const entries = artists.map((a) => ({ name: a.name, set_group: a.setGroup }));
+    const entries = artists.map((a) => ({ id: a.id, name: a.name, set_group: a.setGroup }));
     const result = await commands.toggleB2b(entries, index);
-    setArtists(result.map((a) => ({ name: a.name, setGroup: a.set_group })));
+    setArtists(result.map((a) => ({ id: a.id, name: a.name, setGroup: a.set_group })));
   };
 
   // First failing required field, or null when the form is complete. Used by
@@ -204,7 +217,7 @@ function useEventForm(initialData?: EventDetail) {
       city: city.trim(),
       state: state.trim().toUpperCase(),
       notes: notes.trim() || null,
-      artists: artists.map((a) => ({ name: a.name, set_group: a.setGroup })),
+      artists: artists.map((a) => ({ id: a.id, name: a.name, set_group: a.setGroup })),
       friends,
     };
   };

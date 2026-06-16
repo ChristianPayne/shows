@@ -77,6 +77,61 @@ pub async fn find_or_create_venue(
     Ok(result.last_insert_rowid())
 }
 
+/// Update an existing event's location **in place** (by id), or re-point to a
+/// match. Editing city/state on the event edit form means "fix this location";
+/// since locations are shared, the rename updates every venue and event under
+/// it — the user owns that trade-off. We only rename when no other location
+/// already holds the target (city, state); if one does we re-point to it, so we
+/// never create a duplicate or trip UNIQUE(city, state). This is also what stops
+/// a debounced rename from spawning a location per keystroke: each save just
+/// renames the same id. Used by `update_event` only — `create_event` still
+/// find-or-creates, because a brand-new event should make new records.
+pub async fn update_or_resolve_location(
+    pool: &SqlitePool,
+    current_id: i64,
+    city: &str,
+    state: &str,
+) -> Result<i64, sqlx::Error> {
+    if let Some(existing) = find_location(pool, city, state).await? {
+        return Ok(existing);
+    }
+    sqlx::query("UPDATE locations SET city = ?1, state = ?2 WHERE id = ?3")
+        .bind(city)
+        .bind(state)
+        .bind(current_id)
+        .execute(pool)
+        .await?;
+    Ok(current_id)
+}
+
+/// Venue counterpart to [`update_or_resolve_location`]. Renames the event's
+/// existing venue (by id) to (name, location_id), or re-points to an existing
+/// venue with that pair — so typing a brand-new name fixes the venue in place
+/// while selecting an existing one moves the event to it.
+pub async fn update_or_resolve_venue(
+    pool: &SqlitePool,
+    current_id: i64,
+    name: &str,
+    location_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let existing: Option<(i64,)> =
+        sqlx::query_as("SELECT id FROM venues WHERE name = ?1 COLLATE NOCASE AND location_id = ?2")
+            .bind(name)
+            .bind(location_id)
+            .fetch_optional(pool)
+            .await?;
+    if let Some((id,)) = existing {
+        return Ok(id);
+    }
+    sqlx::query("UPDATE venues SET name = ?1, location_id = ?2 WHERE id = ?3")
+        .bind(name)
+        .bind(location_id)
+        .bind(current_id)
+        .execute(pool)
+        .await?;
+    Ok(current_id)
+}
+
 /// Look up venues by name across all locations. Used by CSV import to detect
 /// when a CSV row mentions a venue that already exists at a different location.
 pub async fn find_venues_by_name(

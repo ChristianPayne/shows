@@ -743,7 +743,16 @@ export type AccentPreset = { id: string; label: string; swatch: string; light: A
  */
 export type ArtistContext = { id: number; name: string; set_group: number | null; total_events: number; first_event: boolean; mbid: string | null }
 export type ArtistContextSet = { artists: ArtistContext[] }
-export type ArtistEntry = { name: string; set_group: number | null }
+export type ArtistEntry = { 
+/**
+ * Id of an existing artist when this chip came from a known artist, so the
+ * save links by it instead of re-resolving the (display) name — the same
+ * id-over-name rule the friend chips use. `None` is a freshly typed name,
+ * resolved via find-or-create (and counted as new for the MusicBrainz
+ * metadata fetch). `toggle_b2b` only reshuffles set_group, so it carries
+ * the id straight through.
+ */
+id: number | null; name: string; set_group: number | null }
 export type ArtistInfo = { id: number; name: string; set_group: number | null }
 export type ArtistLinks = { link_spotify: string | null; link_instagram: string | null; link_youtube: string | null; link_soundcloud: string | null; link_bandcamp: string | null; link_website: string | null }
 /**

@@ -8,6 +8,13 @@ use crate::db::queries;
 
 #[derive(serde::Deserialize, serde::Serialize, specta::Type, Clone)]
 pub struct ArtistEntry {
+    /// Id of an existing artist when this chip came from a known artist, so the
+    /// save links by it instead of re-resolving the (display) name — the same
+    /// id-over-name rule the friend chips use. `None` is a freshly typed name,
+    /// resolved via find-or-create (and counted as new for the MusicBrainz
+    /// metadata fetch). `toggle_b2b` only reshuffles set_group, so it carries
+    /// the id straight through.
+    pub id: Option<i64>,
     pub name: String,
     pub set_group: Option<i64>,
 }
@@ -174,16 +181,26 @@ pub async fn create_event(
     let mut artists = Vec::new();
     let mut new_artist_ids: Vec<i64> = Vec::new();
     for entry in &input.artists {
-        let trimmed = entry.name.trim();
-        if !trimmed.is_empty() {
-            let (id, was_inserted) = queries::find_or_create_artist(&pool, trimmed)
-                .await
-                .map_err(|e| e.to_string())?;
-            if was_inserted {
-                new_artist_ids.push(id);
+        let id = match entry.id {
+            // Existing artist — link by id; the display name is ignored.
+            Some(id) => id,
+            // New name — find-or-create, and count a genuine insert as new so
+            // only it triggers the MusicBrainz metadata fetch below.
+            None => {
+                let trimmed = entry.name.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let (id, was_inserted) = queries::find_or_create_artist(&pool, trimmed)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if was_inserted {
+                    new_artist_ids.push(id);
+                }
+                id
             }
-            artists.push((id, entry.set_group));
-        }
+        };
+        artists.push((id, entry.set_group));
     }
 
     let friend_ids = resolve_friend_ids(&pool, &input.friends).await?;
@@ -226,27 +243,52 @@ pub async fn update_event(
     event_id: i64,
     input: CreateEventInput,
 ) -> Result<(), String> {
-    let location_id = queries::find_or_create_location(&pool, &input.city, &input.state)
-        .await
-        .map_err(|e| e.to_string())?;
+    // Editing updates the event's existing venue/location *in place* by id,
+    // unlike create_event's find-or-create. Without this, each debounced
+    // auto-save during a rename find-or-creates a brand-new venue/location for
+    // every half-typed string. Pull the current ids off the event row.
+    let (current_venue_id, current_location_id): (i64, i64) = sqlx::query_as(
+        "SELECT e.venue_id, v.location_id FROM events e
+         JOIN venues v ON e.venue_id = v.id
+         WHERE e.id = ?1",
+    )
+    .bind(event_id)
+    .fetch_one(pool.inner())
+    .await
+    .map_err(|e| e.to_string())?;
 
-    let venue_id = queries::find_or_create_venue(&pool, &input.venue, location_id)
+    let location_id =
+        queries::update_or_resolve_location(&pool, current_location_id, &input.city, &input.state)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    let venue_id = queries::update_or_resolve_venue(&pool, current_venue_id, &input.venue, location_id)
         .await
         .map_err(|e| e.to_string())?;
 
     let mut artists = Vec::new();
     let mut new_artist_ids: Vec<i64> = Vec::new();
     for entry in &input.artists {
-        let trimmed = entry.name.trim();
-        if !trimmed.is_empty() {
-            let (id, was_inserted) = queries::find_or_create_artist(&pool, trimmed)
-                .await
-                .map_err(|e| e.to_string())?;
-            if was_inserted {
-                new_artist_ids.push(id);
+        let id = match entry.id {
+            // Existing artist — link by id; the display name is ignored.
+            Some(id) => id,
+            // New name — find-or-create, and count a genuine insert as new so
+            // only it triggers the MusicBrainz metadata fetch below.
+            None => {
+                let trimmed = entry.name.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let (id, was_inserted) = queries::find_or_create_artist(&pool, trimmed)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if was_inserted {
+                    new_artist_ids.push(id);
+                }
+                id
             }
-            artists.push((id, entry.set_group));
-        }
+        };
+        artists.push((id, entry.set_group));
     }
 
     // Keep the on-disk image folder in sync with the event name. We rename
