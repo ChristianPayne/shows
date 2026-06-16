@@ -132,6 +132,11 @@ export function Autocomplete({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        // Close on focus-out so tabbing away (or to the next field) doesn't
+        // leave the menu open. Item clicks commit on mousedown with
+        // preventDefault, so they never blur the input — only a real focus-out
+        // (Tab, click elsewhere) lands here.
+        onBlur={() => setOpen(false)}
         onKeyDown={handleKeyDownInternal}
         placeholder={placeholder}
       />

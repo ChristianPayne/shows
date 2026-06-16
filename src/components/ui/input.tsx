@@ -69,6 +69,9 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
             // by hand still works for keyboard users.
             tabIndex={-1}
             aria-label="Clear"
+            // Don't steal focus from the input — keeps the caret there for
+            // continued typing and avoids blurring open comboboxes shut.
+            onMouseDown={(e) => e.preventDefault()}
             onClick={clear}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm text-muted-foreground transition-colors hover:text-foreground"
           >
