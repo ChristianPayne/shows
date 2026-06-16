@@ -4,6 +4,7 @@ import { BackButton } from "@/components/BackButton";
 import { EntityMediaSection } from "@/components/EntityMediaSection";
 import { EventsTable } from "@/components/EventsTable";
 import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/SearchInput";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -98,10 +99,10 @@ export function FriendsListPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Friends</h1>
-        <Input
+        <SearchInput
           placeholder="Search friends..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           className="w-1/2 mx-auto"
         />
         <DropdownMenu>

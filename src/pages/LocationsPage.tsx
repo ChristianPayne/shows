@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { BackButton } from "@/components/BackButton";
 import { EntityMediaSection } from "@/components/EntityMediaSection";
 import { EventsTable } from "@/components/EventsTable";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/SearchInput";
 import {
   Table,
   TableBody,
@@ -64,10 +64,10 @@ export function LocationsListPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Locations</h1>
-        <Input
+        <SearchInput
           placeholder="Search locations..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           className="w-1/2 mx-auto"
         />
       </div>
