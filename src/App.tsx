@@ -14,6 +14,7 @@ import { MediaPage } from "@/pages/MediaPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { cn } from "@/lib/utils";
 import { applyAccent, ACCENT_PRESETS, type AccentPreset } from "@/lib/accent";
+import { settings } from "@/lib/settings";
 import { StreamerModeProvider } from "@/lib/streamerMode";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
@@ -79,51 +80,43 @@ function AppLayout() {
   useEffect(() => {
     // Load persisted theme, accent, and any custom accent colors.
     Promise.all([
-      commands.getSetting("theme"),
-      commands.getSetting("accent"),
-      commands.getSetting("custom_accents"),
-      commands.getSetting("streamer_mode"),
-    ]).then(([themeValue, accentValue, customJson, streamerValue]) => {
+      settings.getTheme(),
+      settings.getAccent(),
+      settings.getCustomAccents(),
+      settings.getStreamerMode(),
+    ]).then(([theme, accentValue, customs, streamer]) => {
       let isDark = document.documentElement.classList.contains("dark");
-      if (themeValue === "dark" || themeValue === "light") {
-        isDark = themeValue === "dark";
+      if (theme !== null) {
+        isDark = theme === "dark";
         setDark(isDark);
         document.documentElement.classList.toggle("dark", isDark);
-      }
-      let customs: AccentPreset[] = [];
-      if (customJson) {
-        try {
-          customs = JSON.parse(customJson);
-        } catch {
-          // Malformed stored value — fall back to no custom accents.
-        }
       }
       setCustomAccents(customs);
       const accent = accentValue ?? "neutral";
       setAccentId(accent);
       applyAccent(accent, isDark, [...ACCENT_PRESETS, ...customs]);
-      setStreamerMode(streamerValue === "true");
+      setStreamerMode(streamer);
     });
   }, []);
 
   const toggleStreamerMode = () => {
     const next = !streamerMode;
     setStreamerMode(next);
-    commands.setSetting("streamer_mode", next ? "true" : "false");
+    settings.setStreamerMode(next);
   };
 
   const toggleDark = () => {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
-    commands.setSetting("theme", next ? "dark" : "light");
+    settings.setTheme(next ? "dark" : "light");
     applyAccent(accentId, next, accents);
   };
 
   const selectAccent = (id: string) => {
     setAccentId(id);
     applyAccent(id, dark, accents);
-    commands.setSetting("accent", id);
+    settings.setAccent(id);
   };
 
   const addCustomAccent = async (hex: string) => {
@@ -132,22 +125,22 @@ function AppLayout() {
       ? customAccents
       : [...customAccents, accent];
     setCustomAccents(next);
-    commands.setSetting("custom_accents", JSON.stringify(next));
+    settings.setCustomAccents(next);
     // Selecting the freshly added color is the obvious next intent.
     setAccentId(accent.id);
     applyAccent(accent.id, dark, [...ACCENT_PRESETS, ...next]);
-    commands.setSetting("accent", accent.id);
+    settings.setAccent(accent.id);
   };
 
   const removeCustomAccent = (id: string) => {
     const next = customAccents.filter((c) => c.id !== id);
     setCustomAccents(next);
-    commands.setSetting("custom_accents", JSON.stringify(next));
+    settings.setCustomAccents(next);
     // Fall back to neutral if the deleted color was the active one.
     if (accentId === id) {
       setAccentId("neutral");
       applyAccent("neutral", dark, [...ACCENT_PRESETS, ...next]);
-      commands.setSetting("accent", "neutral");
+      settings.setAccent("neutral");
     }
   };
 

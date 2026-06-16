@@ -21,6 +21,7 @@ import { EventDetailView } from "@/components/EventDetail";
 import { CreateEventForm, EditEventForm } from "@/components/EventForm";
 import { SkeletonTableRow } from "@/components/Skeleton";
 import { commands } from "@/lib/commands";
+import { settings } from "@/lib/settings";
 import type {
   EventDetail,
   CreateEventInput,
@@ -28,12 +29,6 @@ import type {
   SortDir,
   EventFilter,
 } from "@/bindings";
-
-// Persisted as a JSON array of the columns the user has *hidden* (rather
-// than the ones shown). Storing the hidden set means any column added to
-// EVENT_COLUMNS in the future defaults to visible instead of disappearing
-// for users whose saved preference predates it.
-const HIDDEN_COLUMNS_KEY = "events_hidden_columns";
 
 let lastEventCount = 0;
 
@@ -62,6 +57,9 @@ export function EventsListPage() {
   const [search, setSearch] = useState(listView.search);
   const [sortKey, setSortKey] = useState<EventSortKey>(listView.sortKey);
   const [sortDir, setSortDir] = useState<SortDir>(listView.sortDir);
+  // The persisted set is the columns the user *hid*, not the ones shown, so any
+  // column later added to EVENT_COLUMNS defaults to visible instead of vanishing
+  // for users whose saved preference predates it.
   const [hiddenColumns, setHiddenColumns] = useState<EventColumnKey[]>([]);
   const [filter, setFilter] = useState<EventFilter>(listView.filter);
   const [filterOpen, setFilterOpen] = useState(listView.filterOpen);
@@ -95,14 +93,7 @@ export function EventsListPage() {
   useEffect(() => {
     // Restore the persisted column-visibility choice on mount, mirroring
     // how App.tsx restores the saved theme via the same settings table.
-    commands.getSetting(HIDDEN_COLUMNS_KEY).then((json) => {
-      if (!json) return;
-      try {
-        setHiddenColumns(JSON.parse(json));
-      } catch {
-        // Malformed stored value — fall back to all columns visible.
-      }
-    });
+    settings.getHiddenEventColumns().then(setHiddenColumns);
   }, []);
 
   const toggleColumn = (key: EventColumnKey) => {
@@ -112,7 +103,7 @@ export function EventsListPage() {
         : [...prev, key];
       // Save immediately, same as the theme toggle — no debounce needed at
       // personal scale, and it keeps the on-disk state in sync per click.
-      commands.setSetting(HIDDEN_COLUMNS_KEY, JSON.stringify(next));
+      settings.setHiddenEventColumns(next);
       return next;
     });
   };

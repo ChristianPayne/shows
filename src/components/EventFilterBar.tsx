@@ -79,11 +79,11 @@ export function EventFilterBar({ filter, onChange, open, onOpenChange }: EventFi
   // Resolve selected ids back to entities for chip rendering. A name->id map
   // keeps the "add" path precise: only existing friends/artists are filterable.
   const selectedFriends = useMemo(
-    () => friendIds.map((id) => friends.find((f) => f.id === id)).filter(Boolean) as Entity[],
+    () => friendIds.map((id) => friends.find((f) => f.id === id)).filter((f): f is Entity => f !== undefined),
     [friendIds, friends]
   );
   const selectedArtists = useMemo(
-    () => artistIds.map((id) => artists.find((a) => a.id === id)).filter(Boolean) as Entity[],
+    () => artistIds.map((id) => artists.find((a) => a.id === id)).filter((a): a is Entity => a !== undefined),
     [artistIds, artists]
   );
 
@@ -112,7 +112,10 @@ export function EventFilterBar({ filter, onChange, open, onOpenChange }: EventFi
       clearInput();
       return;
     }
-    patch({ [key]: [...selected, match.id] } as Partial<EventFilter>);
+    const next = [...selected, match.id];
+    // Discriminate on the literal key so the patch is a checked EventFilter
+    // member rather than a computed-key object widened to string.
+    patch(key === "friendIds" ? { friendIds: next } : { artistIds: next });
     clearInput();
   };
 

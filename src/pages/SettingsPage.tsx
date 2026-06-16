@@ -28,6 +28,7 @@ import { CsvPreviewDialog } from "@/components/CsvPreviewDialog";
 import { CommonTagsSettings } from "@/components/CommonTagsSettings";
 import { useUpdater } from "@/hooks/useUpdater";
 import { commands } from "@/lib/commands";
+import { settings } from "@/lib/settings";
 import type { ImportResult, PreviewRow } from "@/bindings";
 
 const isValidHex = (s: string) => /^#[0-9a-fA-F]{6}$/.test(s.trim());
@@ -65,7 +66,7 @@ export function SettingsPage({
   const [setlistfmKey, setSetlistfmKey] = useState("");
 
   useEffect(() => {
-    commands.getSetting("setlistfm_api_key").then((value) => {
+    settings.getSetlistfmKey().then((value) => {
       setSetlistfmKey(value ?? "");
     });
   }, []);
@@ -390,7 +391,7 @@ export function SettingsPage({
               onBlur={(e) => {
                 // Persist whatever's in the field, including empty — clearing
                 // the input is the only way to remove a previously saved key.
-                commands.setSetting("setlistfm_api_key", e.target.value.trim());
+                settings.setSetlistfmKey(e.target.value.trim());
               }}
             />
           </div>
