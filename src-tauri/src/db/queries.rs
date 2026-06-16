@@ -2,20 +2,22 @@ use sqlx::SqlitePool;
 
 use super::models::*;
 
-/// Raw row shape returned by the artist metadata query — kept as a type alias
-/// because spelling it out inline trips clippy::type_complexity, and the column
-/// list is awkward to map to a struct since it's purely a tuple decoded from
-/// `query_as`.
-type ArtistMetaRow = (
-    Option<String>, // genre
-    Option<String>, // tags
-    Option<String>, // country
-    Option<String>, // artist_type
-    Option<String>, // begin_year
-    Option<String>, // end_year
-    Option<bool>,   // active
-    Option<String>, // disambiguation
-);
+/// Artist metadata columns from MusicBrainz, decoded by name. A named struct
+/// (rather than a positional tuple) so reordering the SELECT or a stray edit
+/// can't silently swap two same-typed columns — e.g. `country` and
+/// `artist_type` are both `Option<String>` and would be indistinguishable by
+/// position. `begin_year`/`end_year` stay `String` because MusicBrainz reports
+/// partial dates, not always a clean integer year.
+#[derive(Default, sqlx::FromRow)]
+struct ArtistMetaRow {
+    genre: Option<String>,
+    country: Option<String>,
+    artist_type: Option<String>,
+    begin_year: Option<String>,
+    end_year: Option<String>,
+    active: Option<bool>,
+    disambiguation: Option<String>,
+}
 
 // ── Find-or-create operations ──
 
@@ -561,15 +563,21 @@ pub async fn delete_location(pool: &SqlitePool, location_id: i64) -> Result<(), 
 
 pub async fn get_artist_stats(pool: &SqlitePool, artist_id: i64) -> Result<ArtistStats, sqlx::Error> {
     // Artist metadata from MusicBrainz
-    let meta: Option<ArtistMetaRow> = sqlx::query_as(
-        "SELECT genre, tags, country, artist_type, begin_year, end_year, active, disambiguation FROM artists WHERE id = ?1"
+    let meta: ArtistMetaRow = sqlx::query_as(
+        "SELECT genre, country, artist_type, begin_year, end_year, active, disambiguation FROM artists WHERE id = ?1"
     )
     .bind(artist_id)
     .fetch_optional(pool)
-    .await?;
+    .await?
+    .unwrap_or_default();
 
-    let (genre, _old_tags, country, artist_type, begin_year, end_year, active, disambiguation) = meta.unwrap_or_default();
-    let genre = genre.filter(|g| !g.is_empty());
+    let genre = meta.genre.filter(|g| !g.is_empty());
+    let country = meta.country.filter(|c| !c.is_empty());
+    let artist_type = meta.artist_type;
+    let begin_year = meta.begin_year;
+    let end_year = meta.end_year;
+    let active = meta.active;
+    let disambiguation = meta.disambiguation.filter(|d| !d.is_empty());
     // Tags come from the curated artist_tags table now, not the old CSV column.
     let tag_list = super::tags::get_artist_tags(pool, artist_id).await?;
     let tags = if tag_list.is_empty() {
@@ -577,29 +585,24 @@ pub async fn get_artist_stats(pool: &SqlitePool, artist_id: i64) -> Result<Artis
     } else {
         Some(tag_list.join(", "))
     };
-    let country = country.filter(|c| !c.is_empty());
-    let disambiguation = disambiguation.filter(|d| !d.is_empty());
 
-    // First/last seen dates
-    let dates: Option<(String, String)> = sqlx::query_as(
+    // First/last *attended* date. MIN/MAX over no attended events is NULL, so
+    // decode as nullable — an upcoming-only or cancelled-only artist yields
+    // (None, None) rather than crashing on a NULL-to-String decode.
+    let (first_seen, last_seen): (Option<String>, Option<String>) = sqlx::query_as(
         "SELECT MIN(e.date), MAX(e.date) FROM events e
          JOIN event_artists ea ON e.id = ea.event_id
-         WHERE ea.artist_id = ?1 AND e.date <= date('now')"
+         WHERE ea.artist_id = ?1 AND e.cancelled = 0 AND e.date <= date('now')"
     )
     .bind(artist_id)
-    .fetch_optional(pool)
+    .fetch_one(pool)
     .await?;
-
-    let (first_seen, last_seen) = match dates {
-        Some((f, l)) => (Some(f), Some(l)),
-        None => (None, None),
-    };
 
     // Unique venues
     let (unique_venues,): (i64,) = sqlx::query_as(
         "SELECT COUNT(DISTINCT e.venue_id) FROM events e
          JOIN event_artists ea ON e.id = ea.event_id
-         WHERE ea.artist_id = ?1"
+         WHERE ea.artist_id = ?1 AND e.cancelled = 0 AND e.date <= date('now')"
     )
     .bind(artist_id)
     .fetch_one(pool)
@@ -610,7 +613,7 @@ pub async fn get_artist_stats(pool: &SqlitePool, artist_id: i64) -> Result<Artis
         "SELECT COUNT(DISTINCT v.location_id) FROM events e
          JOIN event_artists ea ON e.id = ea.event_id
          JOIN venues v ON e.venue_id = v.id
-         WHERE ea.artist_id = ?1"
+         WHERE ea.artist_id = ?1 AND e.cancelled = 0 AND e.date <= date('now')"
     )
     .bind(artist_id)
     .fetch_one(pool)
@@ -673,18 +676,23 @@ pub async fn get_artist_context_for_event(
 
     for artist in &artists {
         // Total number of events this artist appears in
+        // Attended-only, so the "Seen N times" badge reflects shows you've
+        // actually been to — an upcoming-only artist reads "Seen 0 times".
         let (total,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM event_artists WHERE artist_id = ?1"
+            "SELECT COUNT(*) FROM event_artists ea
+             JOIN events e ON ea.event_id = e.id
+             WHERE ea.artist_id = ?1 AND e.cancelled = 0 AND e.date <= date('now')"
         )
         .bind(artist.id)
         .fetch_one(pool)
         .await?;
 
-        // Earliest event date for this artist
-        let (earliest,): (String,) = sqlx::query_as(
+        // Earliest *attended* date. NULL (None) when there are no attended
+        // events yet — e.g. viewing an upcoming show by a never-seen artist.
+        let (earliest,): (Option<String>,) = sqlx::query_as(
             "SELECT MIN(e.date) FROM events e
              JOIN event_artists ea ON e.id = ea.event_id
-             WHERE ea.artist_id = ?1"
+             WHERE ea.artist_id = ?1 AND e.cancelled = 0 AND e.date <= date('now')"
         )
         .bind(artist.id)
         .fetch_one(pool)
@@ -703,7 +711,10 @@ pub async fn get_artist_context_for_event(
             name: artist.name.clone(),
             set_group: artist.set_group,
             total_events: total,
-            first_event: earliest == event_date,
+            // True only when this event is the artist's earliest attended one.
+            // A future event never matches (its date is after any attended
+            // date), and None means nothing attended yet — both correctly false.
+            first_event: earliest.as_deref() == Some(event_date),
             mbid,
         });
     }
@@ -868,9 +879,15 @@ pub async fn get_artists_with_counts(
     }
 
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT a.id, a.name, COUNT(ea.event_id) as event_count, a.genre, a.country, a.artist_type
+        // event_count is attended-only (past, non-cancelled). The events join +
+        // COUNT(CASE …) keeps zero-attended artists in the list at count 0,
+        // where a WHERE filter on the LEFT-joined rows would drop them.
+        "SELECT a.id, a.name,
+                COUNT(CASE WHEN e.cancelled = 0 AND e.date <= date('now') THEN 1 END) as event_count,
+                a.genre, a.country, a.artist_type
          FROM artists a
          LEFT JOIN event_artists ea ON a.id = ea.artist_id
+         LEFT JOIN events e ON ea.event_id = e.id
          GROUP BY a.id
          ORDER BY CASE WHEN a.name LIKE 'The %' THEN substr(a.name, 5) ELSE a.name END",
     )
@@ -897,7 +914,9 @@ pub async fn get_venues_with_counts(
     pool: &SqlitePool,
 ) -> Result<Vec<VenueWithCount>, sqlx::Error> {
     let rows: Vec<VenueWithCount> = sqlx::query_as(
-        "SELECT v.id, v.name, COUNT(e.id) as event_count, v.location_id, l.city, l.state
+        "SELECT v.id, v.name,
+                COUNT(CASE WHEN e.cancelled = 0 AND e.date <= date('now') THEN 1 END) as event_count,
+                v.location_id, l.city, l.state
          FROM venues v
          JOIN locations l ON v.location_id = l.id
          LEFT JOIN events e ON v.id = e.venue_id
@@ -914,7 +933,8 @@ pub async fn get_locations_with_counts(
     pool: &SqlitePool,
 ) -> Result<Vec<LocationWithCount>, sqlx::Error> {
     let rows: Vec<LocationWithCount> = sqlx::query_as(
-        "SELECT l.id, l.city, l.state, COUNT(e.id) as event_count
+        "SELECT l.id, l.city, l.state,
+                COUNT(CASE WHEN e.cancelled = 0 AND e.date <= date('now') THEN 1 END) as event_count
          FROM locations l
          LEFT JOIN venues v ON l.id = v.location_id
          LEFT JOIN events e ON v.id = e.venue_id
@@ -1129,9 +1149,11 @@ pub async fn get_friends_with_counts(
     pool: &SqlitePool,
 ) -> Result<Vec<FriendWithCount>, sqlx::Error> {
     let mut rows: Vec<FriendWithCount> = sqlx::query_as(
-        "SELECT f.id, f.name, COUNT(ef.event_id) as event_count
+        "SELECT f.id, f.name,
+                COUNT(CASE WHEN e.cancelled = 0 AND e.date <= date('now') THEN 1 END) as event_count
          FROM friends f
          LEFT JOIN event_friends ef ON f.id = ef.friend_id
+         LEFT JOIN events e ON ef.event_id = e.id
          GROUP BY f.id
          ORDER BY f.name COLLATE NOCASE",
     )
@@ -1401,20 +1423,35 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<Stats, sqlx::Error> {
             .fetch_one(pool)
             .await?;
 
-    let (total_artists,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM artists")
-            .fetch_one(pool)
-            .await?;
+    // "Attended" = a past, non-cancelled event. Count distinct entities with at
+    // least one, so artists/venues/locations you only have upcoming (or
+    // cancelled) shows for — and orphans with no events — don't inflate the
+    // totals. Same filter total_events and the top-N queries already use.
+    let (total_artists,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT ea.artist_id)
+         FROM event_artists ea
+         JOIN events e ON ea.event_id = e.id
+         WHERE e.cancelled = 0 AND e.date <= date('now')",
+    )
+    .fetch_one(pool)
+    .await?;
 
-    let (total_venues,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM venues")
-            .fetch_one(pool)
-            .await?;
+    let (total_venues,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT e.venue_id)
+         FROM events e
+         WHERE e.cancelled = 0 AND e.date <= date('now')",
+    )
+    .fetch_one(pool)
+    .await?;
 
-    let (total_locations,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM locations")
-            .fetch_one(pool)
-            .await?;
+    let (total_locations,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT v.location_id)
+         FROM events e
+         JOIN venues v ON e.venue_id = v.id
+         WHERE e.cancelled = 0 AND e.date <= date('now')",
+    )
+    .fetch_one(pool)
+    .await?;
 
     let top_artists: Vec<EntityCount> = sqlx::query_as(
         "SELECT a.id, a.name, COUNT(ea.event_id) as count
